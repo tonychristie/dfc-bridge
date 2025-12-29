@@ -52,10 +52,18 @@ class DfcTypeUtilsTest {
             "test, test",
             "test's value, test''s value",
             "it's a 'test', it''s a ''test''",
-            "'quoted', ''quoted''",
             "no quotes, no quotes",
     })
     void testSanitizeDqlString(String input, String expected) {
+        assertEquals(expected, DfcTypeUtils.sanitizeDqlString(input));
+    }
+
+    @Test
+    void testSanitizeDqlString_QuotedString() {
+        // Test string that is wrapped in single quotes
+        // (Cannot use CsvSource as it interprets outer quotes as CSV delimiters)
+        String input = "'quoted'";
+        String expected = "''quoted''";
         assertEquals(expected, DfcTypeUtils.sanitizeDqlString(input));
     }
 
