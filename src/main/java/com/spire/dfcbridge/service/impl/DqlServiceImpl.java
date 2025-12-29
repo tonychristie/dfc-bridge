@@ -5,6 +5,7 @@ import com.spire.dfcbridge.exception.DqlException;
 import com.spire.dfcbridge.model.QueryResult;
 import com.spire.dfcbridge.service.DfcSessionService;
 import com.spire.dfcbridge.service.DqlService;
+import com.spire.dfcbridge.util.DfcTypeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -182,7 +183,7 @@ public class DqlServiceImpl implements DqlService {
 
             columns.add(QueryResult.ColumnInfo.builder()
                     .name(name)
-                    .type(dataTypeToString(dataType))
+                    .type(DfcTypeUtils.dataTypeToString(dataType))
                     .length(length)
                     .repeating(repeating)
                     .build());
@@ -251,19 +252,6 @@ public class DqlServiceImpl implements DqlService {
             case "TIME" -> "getRepeatingTime";
             case "ID" -> "getRepeatingId";
             default -> "getRepeatingString";
-        };
-    }
-
-    private String dataTypeToString(int dataType) {
-        // DFC data type constants
-        return switch (dataType) {
-            case 0 -> "BOOLEAN";
-            case 1 -> "INTEGER";
-            case 2 -> "STRING";
-            case 3 -> "ID";
-            case 4 -> "TIME";
-            case 5 -> "DOUBLE";
-            default -> "UNDEFINED";
         };
     }
 }
