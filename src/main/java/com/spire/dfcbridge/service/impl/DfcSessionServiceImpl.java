@@ -124,16 +124,8 @@ public class DfcSessionServiceImpl implements DfcSessionService {
     public void disconnect(String sessionId) {
         SessionHolder holder = sessions.remove(sessionId);
         if (holder != null) {
-            try {
-                // Release session back to session manager
-                Class<?> sessionMgrClass = Class.forName(DFC_SESSION_MANAGER_IFACE);
-                Method releaseMethod = sessionMgrClass.getMethod("release",
-                        Class.forName(DFC_SESSION_IFACE));
-                releaseMethod.invoke(holder.sessionManager, holder.dfSession);
-                log.info("Session {} disconnected", sessionId);
-            } catch (Exception e) {
-                log.warn("Error releasing session {}: {}", sessionId, e.getMessage());
-            }
+            releaseDfcSession(holder);
+            log.info("Session {} disconnected", sessionId);
         }
     }
 
@@ -189,11 +181,27 @@ public class DfcSessionServiceImpl implements DfcSessionService {
         sessions.entrySet().removeIf(entry -> {
             if (entry.getValue().sessionInfo.getLastActivity().isBefore(cutoff)) {
                 log.info("Cleaning up expired session: {}", entry.getKey());
-                disconnect(entry.getKey());
+                // Release the DFC session directly instead of calling disconnect()
+                // since removeIf will handle removing the entry from the map
+                releaseDfcSession(entry.getValue());
                 return true;
             }
             return false;
         });
+    }
+
+    /**
+     * Releases a DFC session back to the session manager.
+     */
+    private void releaseDfcSession(SessionHolder holder) {
+        try {
+            Class<?> sessionMgrClass = Class.forName(DFC_SESSION_MANAGER_IFACE);
+            Method releaseMethod = sessionMgrClass.getMethod("release",
+                    Class.forName(DFC_SESSION_IFACE));
+            releaseMethod.invoke(holder.sessionManager, holder.dfSession);
+        } catch (Exception e) {
+            log.warn("Error releasing DFC session: {}", e.getMessage());
+        }
     }
 
     @PreDestroy

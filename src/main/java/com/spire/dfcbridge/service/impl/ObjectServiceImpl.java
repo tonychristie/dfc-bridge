@@ -9,6 +9,7 @@ import com.spire.dfcbridge.model.ObjectInfo;
 import com.spire.dfcbridge.model.TypeInfo;
 import com.spire.dfcbridge.service.DfcSessionService;
 import com.spire.dfcbridge.service.ObjectService;
+import com.spire.dfcbridge.util.DfcTypeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -184,7 +185,9 @@ public class ObjectServiceImpl implements ObjectService {
             // Query for types
             String dql = "SELECT name FROM dm_type";
             if (pattern != null && !pattern.isEmpty()) {
-                dql += " WHERE name LIKE '" + pattern.replace("*", "%") + "'";
+                // Escape single quotes to prevent SQL injection
+                String sanitizedPattern = DfcTypeUtils.sanitizeDqlString(pattern).replace("*", "%");
+                dql += " WHERE name LIKE '" + sanitizedPattern + "'";
             }
             dql += " ORDER BY name";
 
@@ -301,7 +304,7 @@ public class ObjectServiceImpl implements ObjectService {
                 .name(objectName)
                 .attributes(attributes)
                 .permissionLevel(permit)
-                .permissionLabel(permitToLabel(permit))
+                .permissionLabel(DfcTypeUtils.permitToLabel(permit))
                 .build();
     }
 
@@ -389,7 +392,7 @@ public class ObjectServiceImpl implements ObjectService {
 
         return TypeInfo.AttributeInfo.builder()
                 .name((String) getNameMethod.invoke(attr))
-                .dataType(dataTypeToString((Integer) getDataTypeMethod.invoke(attr)))
+                .dataType(DfcTypeUtils.dataTypeToString((Integer) getDataTypeMethod.invoke(attr)))
                 .length((Integer) getLengthMethod.invoke(attr))
                 .repeating((Boolean) isRepeatingMethod.invoke(attr))
                 .build();
@@ -415,28 +418,4 @@ public class ObjectServiceImpl implements ObjectService {
         throw new NoSuchMethodException("Method not found: " + methodName);
     }
 
-    private String dataTypeToString(int dataType) {
-        return switch (dataType) {
-            case 0 -> "BOOLEAN";
-            case 1 -> "INTEGER";
-            case 2 -> "STRING";
-            case 3 -> "ID";
-            case 4 -> "TIME";
-            case 5 -> "DOUBLE";
-            default -> "UNDEFINED";
-        };
-    }
-
-    private String permitToLabel(int permit) {
-        return switch (permit) {
-            case 1 -> "NONE";
-            case 2 -> "BROWSE";
-            case 3 -> "READ";
-            case 4 -> "RELATE";
-            case 5 -> "VERSION";
-            case 6 -> "WRITE";
-            case 7 -> "DELETE";
-            default -> "UNKNOWN";
-        };
-    }
 }
