@@ -1,0 +1,51 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: dfc-bridge
+
+# DFC Bridge Configuration
+dfc:
+  session:
+    # Default session timeout in minutes
+    timeout-minutes: 30
+    # Enable automatic reconnection on session loss
+    auto-reconnect: true
+    # Maximum concurrent sessions per profile
+    max-sessions-per-profile: 10
+
+  profiles:
+    # DFC profiles are configured per environment
+    # Each profile specifies the DFC installation to use
+    # Example profile configuration:
+    # default:
+    #   java-home: /opt/java/jdk11
+    #   dfc-path: /opt/dctm/product/7.3
+    #   dfc-properties: /opt/dctm/config/dfc.properties
+    enabled: []
+
+# Actuator endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# OpenAPI configuration
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+    tagsSorter: alpha
+
+# Logging
+logging:
+  level:
+    com.spire.dfcbridge: DEBUG
+    com.documentum: INFO
