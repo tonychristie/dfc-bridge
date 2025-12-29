@@ -48,3 +48,6 @@ secrets/
 # Build
 build/
 out/
+
+# Project notes
+CLAUDE.md
