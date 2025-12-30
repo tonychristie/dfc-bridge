@@ -6,6 +6,7 @@ import com.spire.dfcbridge.exception.ConnectionException;
 import com.spire.dfcbridge.exception.SessionNotFoundException;
 import com.spire.dfcbridge.model.RepositoryInfo;
 import com.spire.dfcbridge.model.SessionInfo;
+import com.spire.dfcbridge.service.DfcAvailabilityService;
 import com.spire.dfcbridge.service.DfcSessionService;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
@@ -36,12 +37,19 @@ public class DfcSessionServiceImpl implements DfcSessionService {
     private static final String DFC_SESSION_IFACE = "com.documentum.fc.client.IDfSession";
 
     private final Map<String, SessionHolder> sessions = new ConcurrentHashMap<>();
+    private final DfcAvailabilityService dfcAvailability;
 
     @Value("${dfc.session.timeout-minutes:30}")
     private int sessionTimeoutMinutes;
 
+    public DfcSessionServiceImpl(DfcAvailabilityService dfcAvailability) {
+        this.dfcAvailability = dfcAvailability;
+    }
+
     @Override
     public ConnectResponse connect(ConnectRequest request) {
+        // Check DFC availability first
+        dfcAvailability.requireDfc();
         log.info("Connecting to repository {} via {}:{}",
                 request.getRepository(), request.getDocbroker(), request.getPort());
 
