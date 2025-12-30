@@ -227,11 +227,35 @@ dfc-bridge/
 mvn test
 ```
 
+## Graceful Degradation
+
+The bridge can start without DFC libraries. When DFC is unavailable:
+
+- The service starts normally and responds to health checks
+- The `/api/v1/status` endpoint reports `mode: degraded`
+- DFC-dependent endpoints (connect, DQL, etc.) return HTTP 503 with error code `DFC_UNAVAILABLE`
+- Non-DFC endpoints continue to work
+
+Check DFC availability:
+```bash
+curl http://localhost:9876/api/v1/status
+```
+
+Response when DFC unavailable:
+```json
+{
+  "service": "dfc-bridge",
+  "dfcAvailable": false,
+  "mode": "degraded",
+  "dfcUnavailableReason": "DFC client class not found on classpath"
+}
+```
+
 ## Troubleshooting
 
 ### DFC not found on classpath
 
-Error: `DFC libraries not found on classpath`
+Error: `DFC_UNAVAILABLE - DFC libraries are not available`
 
 Solution: Ensure DFC JARs are on the classpath when running the application:
 ```bash
