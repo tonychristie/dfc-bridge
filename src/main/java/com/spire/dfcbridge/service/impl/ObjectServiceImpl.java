@@ -285,15 +285,9 @@ public class ObjectServiceImpl implements ObjectService {
     }
 
     private ObjectInfo extractObjectInfo(Object sysObject, String objectId) throws Exception {
-        Class<?> sysObjClass = Class.forName(DFC_SYSOBJ_IFACE);
-
-        Method getTypeNameMethod = sysObject.getClass().getMethod("getTypeName");
-        Method getObjectNameMethod = sysObject.getClass().getMethod("getObjectName");
-        Method getPermitMethod = sysObject.getClass().getMethod("getPermit");
-
-        String typeName = (String) getTypeNameMethod.invoke(sysObject);
-        String objectName = (String) getObjectNameMethod.invoke(sysObject);
-        int permit = (Integer) getPermitMethod.invoke(sysObject);
+        String typeName = (String) invokeReflection(sysObject, "getTypeName");
+        String objectName = (String) invokeReflection(sysObject, "getObjectName");
+        int permit = (Integer) invokeReflection(sysObject, "getPermit");
 
         // Get all attributes
         Map<String, Object> attributes = extractAllAttributes(sysObject);
@@ -311,19 +305,14 @@ public class ObjectServiceImpl implements ObjectService {
     private Map<String, Object> extractAllAttributes(Object sysObject) throws Exception {
         Map<String, Object> attributes = new HashMap<>();
 
-        Method getAttrCountMethod = sysObject.getClass().getMethod("getAttrCount");
-        Method getAttrMethod = sysObject.getClass().getMethod("getAttr", int.class);
-
-        int attrCount = (Integer) getAttrCountMethod.invoke(sysObject);
+        int attrCount = (Integer) invokeReflection(sysObject, "getAttrCount");
 
         for (int i = 0; i < attrCount; i++) {
-            Object attr = getAttrMethod.invoke(sysObject, i);
-            Method getNameMethod = attr.getClass().getMethod("getName");
-            String attrName = (String) getNameMethod.invoke(attr);
+            Object attr = invokeReflection(sysObject, "getAttr", new Class<?>[]{int.class}, i);
+            String attrName = (String) invokeReflection(attr, "getName");
 
             try {
-                Method getValueMethod = sysObject.getClass().getMethod("getValue", String.class);
-                Object value = getValueMethod.invoke(sysObject, attrName);
+                Object value = invokeReflection(sysObject, "getValue", new Class<?>[]{String.class}, attrName);
                 if (value != null) {
                     attributes.put(attrName, value.toString());
                 }
@@ -357,44 +346,32 @@ public class ObjectServiceImpl implements ObjectService {
     }
 
     private TypeInfo extractTypeInfo(Object type) throws Exception {
-        Class<?> typeClass = Class.forName(DFC_TYPE_IFACE);
-
-        Method getNameMethod = type.getClass().getMethod("getName");
-        Method getSuperNameMethod = type.getClass().getMethod("getSuperName");
-        Method isTypeInternalMethod = type.getClass().getMethod("isTypeInternal");
-        Method getTypeAttrCountMethod = type.getClass().getMethod("getTypeAttrCount");
-        Method getTypeAttrMethod = type.getClass().getMethod("getTypeAttr", int.class);
-
-        String name = (String) getNameMethod.invoke(type);
-        String superName = (String) getSuperNameMethod.invoke(type);
-        boolean isInternal = (Boolean) isTypeInternalMethod.invoke(type);
-        int attrCount = (Integer) getTypeAttrCountMethod.invoke(type);
+        String name = (String) invokeReflection(type, "getName");
+        String superName = (String) invokeReflection(type, "getSuperName");
+        // DFC doesn't expose isTypeInternal; determine from naming convention
+        boolean isSystem = name.startsWith("dm_") || name.startsWith("dmi_");
+        int attrCount = (Integer) invokeReflection(type, "getTypeAttrCount");
 
         List<TypeInfo.AttributeInfo> attributes = new ArrayList<>();
         for (int i = 0; i < attrCount; i++) {
-            Object attr = getTypeAttrMethod.invoke(type, i);
+            Object attr = invokeReflection(type, "getTypeAttr", new Class<?>[]{int.class}, i);
             attributes.add(extractAttributeInfo(attr));
         }
 
         return TypeInfo.builder()
                 .name(name)
                 .superType(superName)
-                .systemType(isInternal)
+                .systemType(isSystem)
                 .attributes(attributes)
                 .build();
     }
 
     private TypeInfo.AttributeInfo extractAttributeInfo(Object attr) throws Exception {
-        Method getNameMethod = attr.getClass().getMethod("getName");
-        Method getDataTypeMethod = attr.getClass().getMethod("getDataType");
-        Method getLengthMethod = attr.getClass().getMethod("getLength");
-        Method isRepeatingMethod = attr.getClass().getMethod("isRepeating");
-
         return TypeInfo.AttributeInfo.builder()
-                .name((String) getNameMethod.invoke(attr))
-                .dataType(DfcTypeUtils.dataTypeToString((Integer) getDataTypeMethod.invoke(attr)))
-                .length((Integer) getLengthMethod.invoke(attr))
-                .repeating((Boolean) isRepeatingMethod.invoke(attr))
+                .name((String) invokeReflection(attr, "getName"))
+                .dataType(DfcTypeUtils.dataTypeToString((Integer) invokeReflection(attr, "getDataType")))
+                .length((Integer) invokeReflection(attr, "getLength"))
+                .repeating((Boolean) invokeReflection(attr, "isRepeating"))
                 .build();
     }
 
@@ -407,6 +384,7 @@ public class ObjectServiceImpl implements ObjectService {
                 int argCount = args != null ? args.size() : 0;
 
                 if (paramCount == argCount) {
+                    method.setAccessible(true);
                     if (args == null || args.isEmpty()) {
                         return method.invoke(target);
                     } else {
@@ -416,6 +394,37 @@ public class ObjectServiceImpl implements ObjectService {
             }
         }
         throw new NoSuchMethodException("Method not found: " + methodName);
+    }
+
+    /**
+     * Helper method to invoke a method via reflection, handling accessibility.
+     * DFC implementation classes are often proxies, so we search through the class
+     * and its declared methods to find what we need.
+     */
+    private Object invokeReflection(Object target, String methodName, Class<?>[] paramTypes, Object... args) throws Exception {
+        // First try using getMethod which searches the entire class hierarchy
+        try {
+            Method method = target.getClass().getMethod(methodName, paramTypes);
+            method.setAccessible(true);
+            return method.invoke(target, args);
+        } catch (NoSuchMethodException e) {
+            // Try getting all methods and finding a match
+            for (Method method : target.getClass().getMethods()) {
+                if (method.getName().equals(methodName) &&
+                    java.util.Arrays.equals(method.getParameterTypes(), paramTypes)) {
+                    method.setAccessible(true);
+                    return method.invoke(target, args);
+                }
+            }
+            throw new NoSuchMethodException(methodName + " on " + target.getClass().getName());
+        }
+    }
+
+    /**
+     * Helper method to invoke a no-arg method via reflection.
+     */
+    private Object invokeReflection(Object target, String methodName) throws Exception {
+        return invokeReflection(target, methodName, new Class<?>[0]);
     }
 
 }
