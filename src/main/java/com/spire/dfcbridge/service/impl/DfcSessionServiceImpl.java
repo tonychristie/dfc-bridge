@@ -31,7 +31,7 @@ public class DfcSessionServiceImpl implements DfcSessionService {
 
     // DFC class names for reflection
     private static final String DFC_CLIENT_CLASS = "com.documentum.fc.client.DfClient";
-    private static final String DFC_LOGIN_INFO_CLASS = "com.documentum.fc.client.DfLoginInfo";
+    private static final String DFC_LOGIN_INFO_CLASS = "com.documentum.fc.common.DfLoginInfo";
     private static final String DFC_SESSION_MANAGER_IFACE = "com.documentum.fc.client.IDfSessionManager";
     private static final String DFC_SESSION_IFACE = "com.documentum.fc.client.IDfSession";
 
@@ -68,12 +68,13 @@ public class DfcSessionServiceImpl implements DfcSessionService {
 
             // Create session manager
             Method newSessionMgrMethod = dfClient.getClass().getMethod("newSessionManager");
+            newSessionMgrMethod.setAccessible(true);
             Object sessionManager = newSessionMgrMethod.invoke(dfClient);
 
             // Set identity
             Class<?> sessionMgrClass = Class.forName(DFC_SESSION_MANAGER_IFACE);
             Method setIdentityMethod = sessionMgrClass.getMethod("setIdentity",
-                    String.class, Class.forName("com.documentum.fc.client.IDfLoginInfo"));
+                    String.class, Class.forName("com.documentum.fc.common.IDfLoginInfo"));
             setIdentityMethod.invoke(sessionManager, request.getRepository(), loginInfo);
 
             // Get session
@@ -146,8 +147,7 @@ public class DfcSessionServiceImpl implements DfcSessionService {
         }
         try {
             // Check if session is still connected
-            Method isConnectedMethod = holder.dfSession.getClass().getMethod("isConnected");
-            return (Boolean) isConnectedMethod.invoke(holder.dfSession);
+            return (Boolean) invokeMethod(holder.dfSession, "isConnected");
         } catch (Exception e) {
             log.warn("Error checking session validity: {}", e.getMessage());
             return false;
@@ -195,10 +195,8 @@ public class DfcSessionServiceImpl implements DfcSessionService {
      */
     private void releaseDfcSession(SessionHolder holder) {
         try {
-            Class<?> sessionMgrClass = Class.forName(DFC_SESSION_MANAGER_IFACE);
-            Method releaseMethod = sessionMgrClass.getMethod("release",
-                    Class.forName(DFC_SESSION_IFACE));
-            releaseMethod.invoke(holder.sessionManager, holder.dfSession);
+            invokeMethod(holder.sessionManager, "release",
+                    new Class<?>[]{Class.forName(DFC_SESSION_IFACE)}, holder.dfSession);
         } catch (Exception e) {
             log.warn("Error releasing DFC session: {}", e.getMessage());
         }
@@ -213,17 +211,15 @@ public class DfcSessionServiceImpl implements DfcSessionService {
     private RepositoryInfo extractRepositoryInfo(Object dfSession, ConnectRequest request) {
         try {
             // Get server version
-            Method getServerVersionMethod = dfSession.getClass().getMethod("getServerVersion");
-            String serverVersion = (String) getServerVersionMethod.invoke(dfSession);
+            String serverVersion = (String) invokeMethod(dfSession, "getServerVersion");
 
             // Get docbase config for more info
-            Method getDocbaseConfigMethod = dfSession.getClass().getMethod("getDocbaseConfig");
-            Object docbaseConfig = getDocbaseConfigMethod.invoke(dfSession);
+            Object docbaseConfig = invokeMethod(dfSession, "getDocbaseConfig");
 
             String docbaseId = null;
             if (docbaseConfig != null) {
-                Method getStringMethod = docbaseConfig.getClass().getMethod("getString", String.class);
-                docbaseId = (String) getStringMethod.invoke(docbaseConfig, "r_docbase_id");
+                docbaseId = (String) invokeMethod(docbaseConfig, "getString",
+                        new Class<?>[]{String.class}, "r_docbase_id");
             }
 
             return RepositoryInfo.builder()
@@ -240,6 +236,23 @@ public class DfcSessionServiceImpl implements DfcSessionService {
                     .contentServerHost(request.getDocbroker())
                     .build();
         }
+    }
+
+    /**
+     * Helper method to invoke a method via reflection, handling accessibility.
+     * DFC implementation classes are often private inner classes requiring setAccessible(true).
+     */
+    private Object invokeMethod(Object target, String methodName, Class<?>[] paramTypes, Object... args) throws Exception {
+        Method method = target.getClass().getMethod(methodName, paramTypes);
+        method.setAccessible(true);
+        return method.invoke(target, args);
+    }
+
+    /**
+     * Helper method to invoke a no-arg method via reflection.
+     */
+    private Object invokeMethod(Object target, String methodName) throws Exception {
+        return invokeMethod(target, methodName, new Class<?>[0]);
     }
 
     /**
