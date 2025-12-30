@@ -55,28 +55,68 @@ mvn clean package
 
 ## Running
 
-### Option 1: With DFC on classpath
+### Using the Startup Script (Recommended)
 
+The `start-dfc-bridge.sh` script provides an easy way to run DFC Bridge with or without DFC libraries.
+
+**First, extract the JAR:**
 ```bash
-# Set up classpath to include DFC libraries
+mvn package
+unzip target/dfc-bridge-*.jar -d target/extracted
+```
+
+**Run with DFC (production mode):**
+```bash
+./start-dfc-bridge.sh
+# or explicitly:
+./start-dfc-bridge.sh --mode=dfc
+```
+
+**Run without DFC (development/testing mode):**
+```bash
+./start-dfc-bridge.sh --mode=nodfc
+```
+
+**Specify a custom port:**
+```bash
+./start-dfc-bridge.sh --mode=nodfc --port=8080
+```
+
+**Show help:**
+```bash
+./start-dfc-bridge.sh --help
+```
+
+#### Startup Script Options
+
+| Option | Description |
+|--------|-------------|
+| `--mode=dfc` | Run with DFC libraries (default) |
+| `--mode=nodfc` | Run without DFC (degraded mode) |
+| `--port=PORT` | Set server port (default: 9876) |
+| `--help` | Show help message |
+
+#### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DFC_HOME` | Path to DFC shared libraries | `$HOME/documentum/shared` |
+| `DFC_CONFIG` | Path to DFC config directory | `$HOME/documentum/config` |
+| `SERVER_PORT` | Server port | 9876 |
+
+### Alternative: Manual Java Invocation
+
+If you prefer not to use the startup script:
+
+**With DFC on classpath:**
+```bash
 export DFC_HOME=/opt/dctm/product/7.3
 export CLASSPATH=$DFC_HOME/shared/lib/dfc.jar:$DFC_HOME/shared/lib/*
-
-# Run the application
 java -jar target/dfc-bridge-1.0.0-SNAPSHOT.jar
 ```
 
-### Option 2: With explicit classpath
-
+**Using Maven (development):**
 ```bash
-java -cp "target/dfc-bridge-1.0.0-SNAPSHOT.jar:$DFC_HOME/shared/lib/*" \
-  com.spire.dfcbridge.DfcBridgeApplication
-```
-
-### Option 3: Using Maven (development)
-
-```bash
-# Requires DFC libs in local Maven repo or on classpath
 mvn spring-boot:run
 ```
 
@@ -119,6 +159,8 @@ Create `application.yml` in the same directory as the JAR.
 |----------|-------------|---------|
 | `SERVER_PORT` | HTTP port | 9876 |
 | `DFC_SESSION_TIMEOUT_MINUTES` | Session timeout | 30 |
+| `DFC_HOME` | Path to DFC shared libraries (used by startup script) | - |
+| `DFC_CONFIG` | Path to DFC config directory (used by startup script) | - |
 
 ## API Documentation
 
