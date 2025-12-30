@@ -86,7 +86,7 @@ Application configuration is in `src/main/resources/application.yml`:
 
 ```yaml
 server:
-  port: 8080
+  port: 9876
 
 dfc:
   session:
@@ -95,18 +95,36 @@ dfc:
     max-sessions-per-profile: 10
 ```
 
+### Port Configuration
+
+The default port is **9876**. Override using any of these methods:
+
+**Command line argument:**
+```bash
+java -jar dfc-bridge-1.0.0-SNAPSHOT.jar --server.port=8080
+```
+
+**Environment variable:**
+```bash
+export SERVER_PORT=8080
+java -jar dfc-bridge-1.0.0-SNAPSHOT.jar
+```
+
+**application.yml override:**
+Create `application.yml` in the same directory as the JAR.
+
 ### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SERVER_PORT` | HTTP port | 8080 |
+| `SERVER_PORT` | HTTP port | 9876 |
 | `DFC_SESSION_TIMEOUT_MINUTES` | Session timeout | 30 |
 
 ## API Documentation
 
 Once running, access the Swagger UI at:
-- **Swagger UI:** http://localhost:8080/swagger-ui.html
-- **OpenAPI JSON:** http://localhost:8080/api-docs
+- **Swagger UI:** http://localhost:9876/swagger-ui.html
+- **OpenAPI JSON:** http://localhost:9876/api-docs
 
 ## API Endpoints
 
@@ -141,7 +159,7 @@ Once running, access the Swagger UI at:
 ### Connect to Repository
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/connect \
+curl -X POST http://localhost:9876/api/v1/connect \
   -H "Content-Type: application/json" \
   -d '{
     "docbroker": "docbroker.example.com",
@@ -166,7 +184,7 @@ Response:
 ### Execute DQL Query
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/dql \
+curl -X POST http://localhost:9876/api/v1/dql \
   -H "Content-Type: application/json" \
   -d '{
     "sessionId": "abc123-...",
@@ -178,13 +196,13 @@ curl -X POST http://localhost:8080/api/v1/dql \
 ### Get Object
 
 ```bash
-curl "http://localhost:8080/api/v1/objects/0901234567890123?sessionId=abc123-..."
+curl "http://localhost:9876/api/v1/objects/0901234567890123?sessionId=abc123-..."
 ```
 
 ### Disconnect
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/disconnect \
+curl -X POST http://localhost:9876/api/v1/disconnect \
   -H "Content-Type: application/json" \
   -d '{"sessionId": "abc123-..."}'
 ```
@@ -192,7 +210,7 @@ curl -X POST http://localhost:8080/api/v1/disconnect \
 ## Health Check
 
 ```bash
-curl http://localhost:8080/actuator/health
+curl http://localhost:9876/actuator/health
 ```
 
 ## Development
