@@ -69,6 +69,18 @@ public class GlobalExceptionHandler {
                         .build());
     }
 
+    @ExceptionHandler(DfcUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleDfcUnavailable(
+            DfcUnavailableException ex, HttpServletRequest request) {
+        log.warn("DFC unavailable: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ErrorResponse.builder()
+                        .code(ex.getCode())
+                        .message(ex.getMessage())
+                        .path(request.getRequestURI())
+                        .build());
+    }
+
     @ExceptionHandler(DfcBridgeException.class)
     public ResponseEntity<ErrorResponse> handleDfcBridgeException(
             DfcBridgeException ex, HttpServletRequest request) {
