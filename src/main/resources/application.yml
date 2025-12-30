@@ -1,5 +1,6 @@
 server:
-  port: 8080
+  # Default port - override with --server.port=XXXX or SERVER_PORT env var
+  port: 9876
 
 spring:
   application:
