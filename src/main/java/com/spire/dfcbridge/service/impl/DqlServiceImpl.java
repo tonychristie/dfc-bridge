@@ -215,7 +215,14 @@ public class DqlServiceImpl implements DqlService {
                                        QueryResult.ColumnInfo col) throws Exception {
         String methodName = getGetterMethodName(col.getType());
         Method getValueMethod = typedObjectClass.getMethod(methodName, String.class);
-        return getValueMethod.invoke(collection, col.getName());
+        Object value = getValueMethod.invoke(collection, col.getName());
+
+        // Convert IDfTime to string using default toString()
+        if ("TIME".equals(col.getType()) && value != null) {
+            value = value.toString();
+        }
+
+        return value;
     }
 
     private Object extractRepeatingValue(Object collection, Class<?> typedObjectClass,
@@ -228,7 +235,12 @@ public class DqlServiceImpl implements DqlService {
         Method getRepeatingMethod = typedObjectClass.getMethod(methodName, String.class, int.class);
 
         for (int i = 0; i < count; i++) {
-            values.add(getRepeatingMethod.invoke(collection, col.getName(), i));
+            Object value = getRepeatingMethod.invoke(collection, col.getName(), i);
+            // Convert IDfTime to string using default toString()
+            if ("TIME".equals(col.getType()) && value != null) {
+                value = value.toString();
+            }
+            values.add(value);
         }
         return values;
     }
