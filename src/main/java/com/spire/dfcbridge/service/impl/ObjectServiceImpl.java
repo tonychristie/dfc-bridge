@@ -2,6 +2,7 @@ package com.spire.dfcbridge.service.impl;
 
 import com.spire.dfcbridge.dto.ApiRequest;
 import com.spire.dfcbridge.dto.ApiResponse;
+import com.spire.dfcbridge.dto.CreateObjectRequest;
 import com.spire.dfcbridge.dto.UpdateObjectRequest;
 import com.spire.dfcbridge.exception.DfcBridgeException;
 import com.spire.dfcbridge.exception.ObjectNotFoundException;
@@ -41,6 +42,57 @@ public class ObjectServiceImpl implements ObjectService {
 
     public ObjectServiceImpl(DfcSessionService sessionService) {
         this.sessionService = sessionService;
+    }
+
+    @Override
+    public List<ObjectInfo> getCabinets(String sessionId) {
+        log.debug("Getting cabinets via DFC");
+
+        Object dfSession = sessionService.getDfcSession(sessionId);
+        List<ObjectInfo> cabinets = new ArrayList<>();
+
+        try {
+            // Query for all cabinets
+            String dql = "SELECT r_object_id, object_name, r_object_type FROM dm_cabinet ORDER BY object_name";
+
+            Class<?> sessionClass = Class.forName(DFC_SESSION_IFACE);
+            Class<?> dfQueryClass = Class.forName("com.documentum.fc.client.DfQuery");
+            Object query = dfQueryClass.getDeclaredConstructor().newInstance();
+
+            Method setDqlMethod = dfQueryClass.getMethod("setDQL", String.class);
+            setDqlMethod.invoke(query, dql);
+
+            Class<?> queryInterface = Class.forName("com.documentum.fc.client.IDfQuery");
+            Method executeMethod = queryInterface.getMethod("execute", sessionClass, int.class);
+            Object collection = executeMethod.invoke(query, dfSession, 0);
+
+            Class<?> collectionClass = collection.getClass();
+            Method nextMethod = collectionClass.getMethod("next");
+            Method closeMethod = collectionClass.getMethod("close");
+            Method getStringMethod = collectionClass.getMethod("getString", String.class);
+
+            try {
+                while ((Boolean) nextMethod.invoke(collection)) {
+                    String objectId = (String) getStringMethod.invoke(collection, "r_object_id");
+                    String objectName = (String) getStringMethod.invoke(collection, "object_name");
+                    String objectType = (String) getStringMethod.invoke(collection, "r_object_type");
+
+                    cabinets.add(ObjectInfo.builder()
+                            .objectId(objectId)
+                            .name(objectName)
+                            .type(objectType)
+                            .build());
+                }
+            } finally {
+                closeMethod.invoke(collection);
+            }
+
+            return cabinets;
+
+        } catch (Exception e) {
+            throw new DfcBridgeException("CABINET_ERROR",
+                    "Failed to get cabinets: " + e.getMessage(), e);
+        }
     }
 
     @Override
@@ -272,6 +324,213 @@ public class ObjectServiceImpl implements ObjectService {
         } catch (Exception e) {
             throw new DfcBridgeException("API_ERROR",
                     "Failed to execute API: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public List<ObjectInfo> listFolderContentsById(String sessionId, String folderId) {
+        log.debug("Listing folder contents by ID: {}", folderId);
+
+        Object dfSession = sessionService.getDfcSession(sessionId);
+        List<ObjectInfo> contents = new ArrayList<>();
+
+        try {
+            Object folder = getObjectById(dfSession, folderId);
+            if (folder == null) {
+                throw new ObjectNotFoundException("Folder not found: " + folderId);
+            }
+
+            // Get folder contents
+            Class<?> folderClass = Class.forName(DFC_FOLDER_IFACE);
+            Method getContentsMethod = folderClass.getMethod("getContents", String.class);
+            Object collection = getContentsMethod.invoke(folder, (String) null);
+
+            // Iterate through collection
+            Class<?> collectionClass = collection.getClass();
+            Method nextMethod = collectionClass.getMethod("next");
+            Method closeMethod = collectionClass.getMethod("close");
+
+            try {
+                while ((Boolean) nextMethod.invoke(collection)) {
+                    Method getIdMethod = collectionClass.getMethod("getId", String.class);
+                    Object id = getIdMethod.invoke(collection, "r_object_id");
+                    String objectId = id.toString();
+
+                    // Get brief info for each object
+                    Object obj = getObjectById(dfSession, objectId);
+                    if (obj != null) {
+                        contents.add(extractObjectInfo(obj, objectId));
+                    }
+                }
+            } finally {
+                closeMethod.invoke(collection);
+            }
+
+            return contents;
+
+        } catch (ObjectNotFoundException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new DfcBridgeException("FOLDER_ERROR",
+                    "Failed to list folder contents: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public ObjectInfo checkout(String sessionId, String objectId) {
+        log.debug("Checking out object: {}", objectId);
+
+        Object dfSession = sessionService.getDfcSession(sessionId);
+
+        try {
+            Object sysObject = getObjectById(dfSession, objectId);
+            if (sysObject == null) {
+                throw new ObjectNotFoundException(objectId);
+            }
+
+            // Call checkout
+            Method checkoutMethod = sysObject.getClass().getMethod("checkout");
+            checkoutMethod.invoke(sysObject);
+
+            return extractObjectInfo(sysObject, objectId);
+
+        } catch (ObjectNotFoundException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new DfcBridgeException("CHECKOUT_ERROR",
+                    "Failed to checkout object: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void cancelCheckout(String sessionId, String objectId) {
+        log.debug("Cancelling checkout of object: {}", objectId);
+
+        Object dfSession = sessionService.getDfcSession(sessionId);
+
+        try {
+            Object sysObject = getObjectById(dfSession, objectId);
+            if (sysObject == null) {
+                throw new ObjectNotFoundException(objectId);
+            }
+
+            // Call cancelCheckout
+            Method cancelCheckoutMethod = sysObject.getClass().getMethod("cancelCheckout");
+            cancelCheckoutMethod.invoke(sysObject);
+
+        } catch (ObjectNotFoundException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new DfcBridgeException("CANCEL_CHECKOUT_ERROR",
+                    "Failed to cancel checkout: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public ObjectInfo checkin(String sessionId, String objectId, String versionLabel) {
+        log.debug("Checking in object: {} with label: {}", objectId, versionLabel);
+
+        Object dfSession = sessionService.getDfcSession(sessionId);
+
+        try {
+            Object sysObject = getObjectById(dfSession, objectId);
+            if (sysObject == null) {
+                throw new ObjectNotFoundException(objectId);
+            }
+
+            // Call checkin with version label
+            Method checkinMethod = sysObject.getClass().getMethod("checkin", boolean.class, String.class);
+            Object newId = checkinMethod.invoke(sysObject, false, versionLabel);
+
+            // Get the new version
+            String newObjectId = newId.toString();
+            Object newObject = getObjectById(dfSession, newObjectId);
+            return extractObjectInfo(newObject, newObjectId);
+
+        } catch (ObjectNotFoundException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new DfcBridgeException("CHECKIN_ERROR",
+                    "Failed to checkin object: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public ObjectInfo createObject(String sessionId, CreateObjectRequest request) {
+        log.debug("Creating object of type: {}", request.getObjectType());
+
+        Object dfSession = sessionService.getDfcSession(sessionId);
+
+        try {
+            Class<?> sessionClass = Class.forName(DFC_SESSION_IFACE);
+
+            // Create new object
+            Method newObjectMethod = sessionClass.getMethod("newObject", String.class);
+            Object newObject = newObjectMethod.invoke(dfSession, request.getObjectType());
+
+            // Set object name if provided
+            if (request.getObjectName() != null) {
+                Method setObjectNameMethod = newObject.getClass().getMethod("setObjectName", String.class);
+                setObjectNameMethod.invoke(newObject, request.getObjectName());
+            }
+
+            // Set additional attributes if provided
+            if (request.getAttributes() != null) {
+                for (Map.Entry<String, Object> attr : request.getAttributes().entrySet()) {
+                    setObjectAttribute(newObject, attr.getKey(), attr.getValue());
+                }
+            }
+
+            // Link to folder if path provided
+            if (request.getFolderPath() != null && !request.getFolderPath().isEmpty()) {
+                Method linkMethod = newObject.getClass().getMethod("link", String.class);
+                linkMethod.invoke(newObject, request.getFolderPath());
+            }
+
+            // Save the object
+            Method saveMethod = newObject.getClass().getMethod("save");
+            saveMethod.invoke(newObject);
+
+            // Get the object ID
+            Method getObjectIdMethod = newObject.getClass().getMethod("getObjectId");
+            Object objectId = getObjectIdMethod.invoke(newObject);
+            String newObjectId = objectId.toString();
+
+            return extractObjectInfo(newObject, newObjectId);
+
+        } catch (Exception e) {
+            throw new DfcBridgeException("CREATE_ERROR",
+                    "Failed to create object: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void deleteObject(String sessionId, String objectId, boolean allVersions) {
+        log.debug("Deleting object: {} (allVersions={})", objectId, allVersions);
+
+        Object dfSession = sessionService.getDfcSession(sessionId);
+
+        try {
+            Object sysObject = getObjectById(dfSession, objectId);
+            if (sysObject == null) {
+                throw new ObjectNotFoundException(objectId);
+            }
+
+            if (allVersions) {
+                // Delete all versions
+                Method destroyAllVersionsMethod = sysObject.getClass().getMethod("destroyAllVersions");
+                destroyAllVersionsMethod.invoke(sysObject);
+            } else {
+                // Delete just this version
+                Method destroyMethod = sysObject.getClass().getMethod("destroy");
+                destroyMethod.invoke(sysObject);
+            }
+
+        } catch (ObjectNotFoundException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new DfcBridgeException("DELETE_ERROR",
+                    "Failed to delete object: " + e.getMessage(), e);
         }
     }
 
