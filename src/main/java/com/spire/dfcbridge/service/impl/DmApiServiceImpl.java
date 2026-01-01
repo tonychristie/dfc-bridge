@@ -7,6 +7,7 @@ import com.spire.dfcbridge.service.DfcSessionService;
 import com.spire.dfcbridge.service.DmApiService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.lang.reflect.Method;
@@ -20,6 +21,7 @@ import java.lang.reflect.Method;
  * - apiSet(command, value) - returns a boolean result
  */
 @Service
+@ConditionalOnProperty(name = "documentum.backend", havingValue = "dfc", matchIfMissing = true)
 public class DmApiServiceImpl implements DmApiService {
 
     private static final Logger log = LoggerFactory.getLogger(DmApiServiceImpl.class);

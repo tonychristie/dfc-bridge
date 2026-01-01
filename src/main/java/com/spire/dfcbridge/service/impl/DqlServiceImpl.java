@@ -8,6 +8,7 @@ import com.spire.dfcbridge.service.DqlService;
 import com.spire.dfcbridge.util.DfcTypeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.lang.reflect.Method;
@@ -20,6 +21,7 @@ import java.util.Map;
  * Implementation of DqlService using reflection to call DFC APIs.
  */
 @Service
+@ConditionalOnProperty(name = "documentum.backend", havingValue = "dfc", matchIfMissing = true)
 public class DqlServiceImpl implements DqlService {
 
     private static final Logger log = LoggerFactory.getLogger(DqlServiceImpl.class);
