@@ -5,6 +5,7 @@ import com.spire.dfcbridge.exception.DqlException;
 import com.spire.dfcbridge.model.QueryResult;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
+import okhttp3.mockwebserver.RecordedRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Unit tests for RestDqlServiceImpl.
+ * Tests DQL execution via Documentum REST Services.
  */
 class RestDqlServiceImplTest {
 
@@ -42,7 +44,7 @@ class RestDqlServiceImplTest {
     }
 
     @Test
-    void executeQuery_returnsResults() {
+    void executeQuery_returnsResults() throws InterruptedException {
         // Arrange
         String jsonResponse = """
             {
@@ -88,6 +90,68 @@ class RestDqlServiceImplTest {
         assertEquals(3, result.getColumns().size());
         assertEquals("0900000180000001", result.getRows().get(0).get("r_object_id"));
         assertEquals("Test Document", result.getRows().get(0).get("object_name"));
+        assertFalse(result.isHasMore());
+
+        // Verify POST request was made
+        RecordedRequest recordedRequest = mockWebServer.takeRequest();
+        assertEquals("POST", recordedRequest.getMethod());
+        assertTrue(recordedRequest.getPath().contains("/repositories/TestRepo/dql"));
+    }
+
+    @Test
+    void executeQuery_usesCorrectContentType() throws InterruptedException {
+        // Arrange
+        String jsonResponse = """
+            {
+                "entries": []
+            }
+            """;
+
+        mockWebServer.enqueue(new MockResponse()
+                .setBody(jsonResponse)
+                .addHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE));
+
+        DqlRequest request = DqlRequest.builder()
+                .sessionId("test-session")
+                .query("SELECT * FROM dm_document")
+                .build();
+
+        // Act
+        dqlService.executeQuery(request);
+
+        // Assert - verify Content-Type header
+        RecordedRequest recordedRequest = mockWebServer.takeRequest();
+        assertEquals("application/vnd.emc.documentum+json",
+                recordedRequest.getHeader(HttpHeaders.CONTENT_TYPE));
+    }
+
+    @Test
+    void executeQuery_sendsQueryInBody() throws InterruptedException {
+        // Arrange
+        String jsonResponse = """
+            {
+                "entries": []
+            }
+            """;
+
+        mockWebServer.enqueue(new MockResponse()
+                .setBody(jsonResponse)
+                .addHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE));
+
+        String testQuery = "SELECT r_object_id FROM dm_document WHERE object_name = 'test'";
+        DqlRequest request = DqlRequest.builder()
+                .sessionId("test-session")
+                .query(testQuery)
+                .build();
+
+        // Act
+        dqlService.executeQuery(request);
+
+        // Assert - verify query is in request body
+        RecordedRequest recordedRequest = mockWebServer.takeRequest();
+        String body = recordedRequest.getBody().readUtf8();
+        assertTrue(body.contains("dql-query"));
+        assertTrue(body.contains(testQuery));
     }
 
     @Test
@@ -115,12 +179,13 @@ class RestDqlServiceImplTest {
         assertNotNull(result);
         assertEquals(0, result.getRowCount());
         assertTrue(result.getRows().isEmpty());
+        assertTrue(result.getColumns().isEmpty());
     }
 
     @Test
-    void executeQuery_handlesPagination() {
-        // Arrange
-        String jsonResponse = """
+    void executeQuery_autoFetchesAllPages() {
+        // Arrange - first page with "next" link
+        String page1Response = """
             {
                 "entries": [
                     {
@@ -137,8 +202,26 @@ class RestDqlServiceImplTest {
             }
             """;
 
+        // Second page without "next" link (last page)
+        String page2Response = """
+            {
+                "entries": [
+                    {
+                        "content": {
+                            "properties": {
+                                "r_object_id": "0900000180000002"
+                            }
+                        }
+                    }
+                ]
+            }
+            """;
+
         mockWebServer.enqueue(new MockResponse()
-                .setBody(jsonResponse)
+                .setBody(page1Response)
+                .addHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE));
+        mockWebServer.enqueue(new MockResponse()
+                .setBody(page2Response)
                 .addHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE));
 
         DqlRequest request = DqlRequest.builder()
@@ -150,8 +233,45 @@ class RestDqlServiceImplTest {
         // Act
         QueryResult result = dqlService.executeQuery(request);
 
-        // Assert
-        assertTrue(result.isHasMore());
+        // Assert - should have fetched both pages
+        assertEquals(2, result.getRowCount());
+        assertEquals("0900000180000001", result.getRows().get(0).get("r_object_id"));
+        assertEquals("0900000180000002", result.getRows().get(1).get("r_object_id"));
+        assertFalse(result.isHasMore());
+        assertEquals(2, mockWebServer.getRequestCount());
+    }
+
+    @Test
+    void executeQuery_tracksExecutionTime() {
+        // Arrange
+        String jsonResponse = """
+            {
+                "entries": [
+                    {
+                        "content": {
+                            "properties": {
+                                "r_object_id": "0900000180000001"
+                            }
+                        }
+                    }
+                ]
+            }
+            """;
+
+        mockWebServer.enqueue(new MockResponse()
+                .setBody(jsonResponse)
+                .addHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE));
+
+        DqlRequest request = DqlRequest.builder()
+                .sessionId("test-session")
+                .query("SELECT r_object_id FROM dm_document")
+                .build();
+
+        // Act
+        QueryResult result = dqlService.executeQuery(request);
+
+        // Assert - execution time should be tracked
+        assertTrue(result.getExecutionTimeMs() >= 0);
     }
 
     @Test
@@ -169,6 +289,64 @@ class RestDqlServiceImplTest {
 
         // Act & Assert
         assertThrows(DqlException.class, () -> dqlService.executeQuery(request));
+    }
+
+    @Test
+    void executeQuery_infersColumnTypes() {
+        // Arrange
+        String jsonResponse = """
+            {
+                "entries": [
+                    {
+                        "content": {
+                            "properties": {
+                                "string_attr": "text",
+                                "int_attr": 42,
+                                "double_attr": 3.14,
+                                "bool_attr": true,
+                                "repeating_attr": ["value1", "value2"]
+                            }
+                        }
+                    }
+                ]
+            }
+            """;
+
+        mockWebServer.enqueue(new MockResponse()
+                .setBody(jsonResponse)
+                .addHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE));
+
+        DqlRequest request = DqlRequest.builder()
+                .sessionId("test-session")
+                .query("SELECT * FROM dm_document")
+                .build();
+
+        // Act
+        QueryResult result = dqlService.executeQuery(request);
+
+        // Assert - check column types
+        assertEquals(5, result.getColumns().size());
+
+        QueryResult.ColumnInfo stringCol = result.getColumns().stream()
+                .filter(c -> "string_attr".equals(c.getName())).findFirst().orElseThrow();
+        assertEquals("STRING", stringCol.getType());
+        assertFalse(stringCol.isRepeating());
+
+        QueryResult.ColumnInfo intCol = result.getColumns().stream()
+                .filter(c -> "int_attr".equals(c.getName())).findFirst().orElseThrow();
+        assertEquals("INTEGER", intCol.getType());
+
+        QueryResult.ColumnInfo doubleCol = result.getColumns().stream()
+                .filter(c -> "double_attr".equals(c.getName())).findFirst().orElseThrow();
+        assertEquals("DOUBLE", doubleCol.getType());
+
+        QueryResult.ColumnInfo boolCol = result.getColumns().stream()
+                .filter(c -> "bool_attr".equals(c.getName())).findFirst().orElseThrow();
+        assertEquals("BOOLEAN", boolCol.getType());
+
+        QueryResult.ColumnInfo repeatingCol = result.getColumns().stream()
+                .filter(c -> "repeating_attr".equals(c.getName())).findFirst().orElseThrow();
+        assertTrue(repeatingCol.isRepeating());
     }
 
     @Test
