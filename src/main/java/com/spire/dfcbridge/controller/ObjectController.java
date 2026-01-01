@@ -2,10 +2,12 @@ package com.spire.dfcbridge.controller;
 
 import com.spire.dfcbridge.dto.ApiRequest;
 import com.spire.dfcbridge.dto.ApiResponse;
+import com.spire.dfcbridge.dto.DmApiRequest;
 import com.spire.dfcbridge.dto.ErrorResponse;
 import com.spire.dfcbridge.dto.UpdateObjectRequest;
 import com.spire.dfcbridge.model.ObjectInfo;
 import com.spire.dfcbridge.model.TypeInfo;
+import com.spire.dfcbridge.service.DmApiService;
 import com.spire.dfcbridge.service.ObjectService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -29,9 +31,11 @@ import java.util.List;
 public class ObjectController {
 
     private final ObjectService objectService;
+    private final DmApiService dmApiService;
 
-    public ObjectController(ObjectService objectService) {
+    public ObjectController(ObjectService objectService, DmApiService dmApiService) {
         this.objectService = objectService;
+        this.dmApiService = dmApiService;
     }
 
     @GetMapping("/objects/{objectId}")
@@ -182,6 +186,34 @@ public class ObjectController {
     })
     public ResponseEntity<ApiResponse> executeApi(@Valid @RequestBody ApiRequest request) {
         ApiResponse response = objectService.executeApi(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/dmapi")
+    @Operation(
+        summary = "Execute dmAPI command",
+        description = "Executes a dmAPI command via session.apiGet(), apiExec(), or apiSet(). " +
+                "These are server-level API calls distinct from DFC object method invocations."
+    )
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "200",
+            description = "dmAPI command executed",
+            content = @Content(schema = @Schema(implementation = ApiResponse.class))
+        ),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "400",
+            description = "Invalid request",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        ),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "500",
+            description = "dmAPI execution error",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        )
+    })
+    public ResponseEntity<ApiResponse> executeDmApi(@Valid @RequestBody DmApiRequest request) {
+        ApiResponse response = dmApiService.execute(request);
         return ResponseEntity.ok(response);
     }
 }

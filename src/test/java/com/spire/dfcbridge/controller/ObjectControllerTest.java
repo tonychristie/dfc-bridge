@@ -3,11 +3,13 @@ package com.spire.dfcbridge.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.spire.dfcbridge.dto.ApiRequest;
 import com.spire.dfcbridge.dto.ApiResponse;
+import com.spire.dfcbridge.dto.DmApiRequest;
 import com.spire.dfcbridge.dto.UpdateObjectRequest;
 import com.spire.dfcbridge.exception.ObjectNotFoundException;
 import com.spire.dfcbridge.exception.SessionNotFoundException;
 import com.spire.dfcbridge.model.ObjectInfo;
 import com.spire.dfcbridge.model.TypeInfo;
+import com.spire.dfcbridge.service.DmApiService;
 import com.spire.dfcbridge.service.ObjectService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +39,9 @@ class ObjectControllerTest {
 
     @MockBean
     private ObjectService objectService;
+
+    @MockBean
+    private DmApiService dmApiService;
 
     // Tests for getObject endpoint
 
@@ -313,5 +318,149 @@ class ObjectControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result").value("dm_document"));
+    }
+
+    // Tests for executeDmApi endpoint
+
+    @Test
+    void testExecuteDmApi_Get_Success() throws Exception {
+        DmApiRequest request = DmApiRequest.builder()
+                .sessionId("session-123")
+                .apiType("get")
+                .command("getservermap,session")
+                .build();
+
+        ApiResponse response = ApiResponse.builder()
+                .result("docbase1:192.168.1.100:1489")
+                .resultType("String")
+                .executionTimeMs(25)
+                .build();
+
+        when(dmApiService.execute(any(DmApiRequest.class))).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/dmapi")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result").value("docbase1:192.168.1.100:1489"))
+                .andExpect(jsonPath("$.resultType").value("String"));
+
+        verify(dmApiService).execute(any(DmApiRequest.class));
+    }
+
+    @Test
+    void testExecuteDmApi_Exec_Success() throws Exception {
+        DmApiRequest request = DmApiRequest.builder()
+                .sessionId("session-123")
+                .apiType("exec")
+                .command("save,session,0900000180000001")
+                .build();
+
+        ApiResponse response = ApiResponse.builder()
+                .result(true)
+                .resultType("Boolean")
+                .executionTimeMs(150)
+                .build();
+
+        when(dmApiService.execute(any(DmApiRequest.class))).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/dmapi")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result").value(true))
+                .andExpect(jsonPath("$.resultType").value("Boolean"));
+    }
+
+    @Test
+    void testExecuteDmApi_Set_Success() throws Exception {
+        DmApiRequest request = DmApiRequest.builder()
+                .sessionId("session-123")
+                .apiType("set")
+                .command("set,session,0900000180000001,object_name,NewName")
+                .build();
+
+        ApiResponse response = ApiResponse.builder()
+                .result(true)
+                .resultType("Boolean")
+                .executionTimeMs(50)
+                .build();
+
+        when(dmApiService.execute(any(DmApiRequest.class))).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/dmapi")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result").value(true))
+                .andExpect(jsonPath("$.resultType").value("Boolean"));
+    }
+
+    @Test
+    void testExecuteDmApi_Dump_Success() throws Exception {
+        DmApiRequest request = DmApiRequest.builder()
+                .sessionId("session-123")
+                .apiType("get")
+                .command("dump,session,0900000180000001")
+                .build();
+
+        String dumpOutput = "USER ATTRIBUTES\n" +
+                "  object_name              : test_document.pdf\n" +
+                "  title                    : Test Document\n" +
+                "SYSTEM ATTRIBUTES\n" +
+                "  r_object_id              : 0900000180000001";
+
+        ApiResponse response = ApiResponse.builder()
+                .result(dumpOutput)
+                .resultType("String")
+                .executionTimeMs(100)
+                .build();
+
+        when(dmApiService.execute(any(DmApiRequest.class))).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/dmapi")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resultType").value("String"));
+    }
+
+    @Test
+    void testExecuteDmApi_MissingSessionId() throws Exception {
+        DmApiRequest request = DmApiRequest.builder()
+                .apiType("get")
+                .command("getservermap,session")
+                .build();
+
+        mockMvc.perform(post("/api/v1/dmapi")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void testExecuteDmApi_MissingApiType() throws Exception {
+        DmApiRequest request = DmApiRequest.builder()
+                .sessionId("session-123")
+                .command("getservermap,session")
+                .build();
+
+        mockMvc.perform(post("/api/v1/dmapi")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void testExecuteDmApi_MissingCommand() throws Exception {
+        DmApiRequest request = DmApiRequest.builder()
+                .sessionId("session-123")
+                .apiType("get")
+                .build();
+
+        mockMvc.perform(post("/api/v1/dmapi")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
     }
 }
