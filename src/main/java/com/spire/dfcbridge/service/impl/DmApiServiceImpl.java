@@ -26,6 +26,9 @@ public class DmApiServiceImpl implements DmApiService {
 
     private static final Logger log = LoggerFactory.getLogger(DmApiServiceImpl.class);
 
+    // DFC interface name - the apiGet/apiExec/apiSet methods are defined on this interface
+    private static final String DFC_SESSION_IFACE = "com.documentum.fc.client.IDfSession";
+
     private final DfcSessionService sessionService;
 
     public DmApiServiceImpl(DfcSessionService sessionService) {
@@ -82,30 +85,30 @@ public class DmApiServiceImpl implements DmApiService {
 
     /**
      * Invoke IDfSession.apiGet(command) via reflection.
-     * Uses the session object's actual class rather than the interface,
-     * as these methods may not be declared on IDfSession.
+     * The method is looked up on the IDfSession interface since the runtime object
+     * may be a proxy/handle that doesn't directly expose these methods.
      */
     private String invokeApiGet(Object dfSession, String command) throws Exception {
-        Method apiGetMethod = dfSession.getClass().getMethod("apiGet", String.class);
-        apiGetMethod.setAccessible(true);
+        Class<?> sessionInterface = Class.forName(DFC_SESSION_IFACE);
+        Method apiGetMethod = sessionInterface.getMethod("apiGet", String.class);
         return (String) apiGetMethod.invoke(dfSession, command);
     }
 
     /**
      * Invoke IDfSession.apiExec(command) via reflection.
-     * Uses the session object's actual class rather than the interface,
-     * as these methods may not be declared on IDfSession.
+     * The method is looked up on the IDfSession interface since the runtime object
+     * may be a proxy/handle that doesn't directly expose these methods.
      */
     private boolean invokeApiExec(Object dfSession, String command) throws Exception {
-        Method apiExecMethod = dfSession.getClass().getMethod("apiExec", String.class);
-        apiExecMethod.setAccessible(true);
+        Class<?> sessionInterface = Class.forName(DFC_SESSION_IFACE);
+        Method apiExecMethod = sessionInterface.getMethod("apiExec", String.class);
         return (Boolean) apiExecMethod.invoke(dfSession, command);
     }
 
     /**
      * Invoke IDfSession.apiSet(command, value) via reflection.
-     * Uses the session object's actual class rather than the interface,
-     * as these methods may not be declared on IDfSession.
+     * The method is looked up on the IDfSession interface since the runtime object
+     * may be a proxy/handle that doesn't directly expose these methods.
      *
      * For apiSet, the value is typically the last comma-separated element in the command.
      * The command format is: "set,session,objectId,attrName,value"
@@ -123,8 +126,8 @@ public class DmApiServiceImpl implements DmApiService {
         String setCommand = command.substring(0, lastComma);
         String value = command.substring(lastComma + 1);
 
-        Method apiSetMethod = dfSession.getClass().getMethod("apiSet", String.class, String.class);
-        apiSetMethod.setAccessible(true);
+        Class<?> sessionInterface = Class.forName(DFC_SESSION_IFACE);
+        Method apiSetMethod = sessionInterface.getMethod("apiSet", String.class, String.class);
         return (Boolean) apiSetMethod.invoke(dfSession, setCommand, value);
     }
 }
