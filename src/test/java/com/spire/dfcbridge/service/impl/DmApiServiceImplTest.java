@@ -1,5 +1,6 @@
 package com.spire.dfcbridge.service.impl;
 
+import com.documentum.fc.client.IDfSession;
 import com.spire.dfcbridge.dto.ApiResponse;
 import com.spire.dfcbridge.dto.DmApiRequest;
 import com.spire.dfcbridge.exception.DfcBridgeException;
@@ -16,6 +17,10 @@ import static org.mockito.Mockito.*;
 /**
  * Unit tests for DmApiServiceImpl.
  * Tests the reflection-based invocation of DFC session API methods.
+ *
+ * Note: DmApiServiceImpl looks up methods on the IDfSession interface via reflection.
+ * Since we can't depend on DFC at test time, we define a matching interface here
+ * with the same fully-qualified name that DFC uses, allowing the reflection to work.
  */
 @ExtendWith(MockitoExtension.class)
 class DmApiServiceImplTest {
@@ -339,10 +344,11 @@ class DmApiServiceImplTest {
     // ========== Mock DFC Session ==========
 
     /**
-     * Mock session object that simulates DFC session API methods.
+     * Mock session object that implements the IDfSession interface stub.
      * Used to verify reflection-based invocation works correctly.
+     * The interface is defined in test sources with the same package/class name as DFC.
      */
-    public static class MockDfSession {
+    public static class MockDfSession implements IDfSession {
         private String apiGetResult;
         private boolean apiExecResult;
         private boolean apiSetResult;
@@ -398,20 +404,23 @@ class DmApiServiceImplTest {
             return lastApiSetValue;
         }
 
-        // DFC-compatible API methods (these are what DmApiServiceImpl will invoke via reflection)
+        // IDfSession interface implementation methods
 
+        @Override
         public String apiGet(String command) {
             this.apiGetCalled = true;
             this.lastApiGetCommand = command;
             return apiGetResult;
         }
 
+        @Override
         public boolean apiExec(String command) {
             this.apiExecCalled = true;
             this.lastApiExecCommand = command;
             return apiExecResult;
         }
 
+        @Override
         public boolean apiSet(String command, String value) {
             this.apiSetCalled = true;
             this.lastApiSetCommand = command;
