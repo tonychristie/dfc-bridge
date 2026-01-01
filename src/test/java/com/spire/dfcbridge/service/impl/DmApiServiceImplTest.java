@@ -21,6 +21,11 @@ import static org.mockito.Mockito.*;
  * Note: DmApiServiceImpl looks up methods on the IDfSession interface via reflection.
  * Since we can't depend on DFC at test time, we define a matching interface here
  * with the same fully-qualified name that DFC uses, allowing the reflection to work.
+ *
+ * DFC method signatures:
+ * - apiGet(String method, String args)
+ * - apiExec(String method, String args)
+ * - apiSet(String method, String args, String value)
  */
 @ExtendWith(MockitoExtension.class)
 class DmApiServiceImplTest {
@@ -38,7 +43,7 @@ class DmApiServiceImplTest {
     // ========== apiGet tests ==========
 
     @Test
-    void apiGet_invokesMethodAndReturnsResult() {
+    void apiGet_splitsCommandAndInvokesMethod() {
         // Arrange
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiGetResult("test-result");
@@ -59,7 +64,9 @@ class DmApiServiceImplTest {
         assertEquals("String", response.getResultType());
         assertTrue(response.getExecutionTimeMs() >= 0);
         assertTrue(mockSession.isApiGetCalled());
-        assertEquals("getdocbaseconfig,session", mockSession.getLastApiGetCommand());
+        // Verify command was split correctly
+        assertEquals("getdocbaseconfig", mockSession.getLastApiGetMethod());
+        assertEquals("session", mockSession.getLastApiGetArgs());
     }
 
     @Test
@@ -81,6 +88,30 @@ class DmApiServiceImplTest {
         // Assert
         assertNull(response.getResult());
         assertEquals("String", response.getResultType());
+        assertEquals("get", mockSession.getLastApiGetMethod());
+        assertEquals("session,invalid", mockSession.getLastApiGetArgs());
+    }
+
+    @Test
+    void apiGet_handlesNoArgs() {
+        // Arrange - command with no comma (method only, empty args)
+        MockDfSession mockSession = new MockDfSession();
+        mockSession.setApiGetResult("result");
+        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+
+        DmApiRequest request = DmApiRequest.builder()
+                .sessionId("test-session")
+                .apiType("get")
+                .command("somemethod")
+                .build();
+
+        // Act
+        ApiResponse response = dmApiService.execute(request);
+
+        // Assert
+        assertEquals("result", response.getResult());
+        assertEquals("somemethod", mockSession.getLastApiGetMethod());
+        assertEquals("", mockSession.getLastApiGetArgs());
     }
 
     @Test
@@ -107,7 +138,7 @@ class DmApiServiceImplTest {
     // ========== apiExec tests ==========
 
     @Test
-    void apiExec_invokesMethodAndReturnsTrue() {
+    void apiExec_splitsCommandAndInvokesMethod() {
         // Arrange
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiExecResult(true);
@@ -127,7 +158,9 @@ class DmApiServiceImplTest {
         assertEquals(true, response.getResult());
         assertEquals("Boolean", response.getResultType());
         assertTrue(mockSession.isApiExecCalled());
-        assertEquals("fetch,session,0900000180000001", mockSession.getLastApiExecCommand());
+        // Verify command was split correctly
+        assertEquals("fetch", mockSession.getLastApiExecMethod());
+        assertEquals("session,0900000180000001", mockSession.getLastApiExecArgs());
     }
 
     @Test
@@ -175,12 +208,14 @@ class DmApiServiceImplTest {
     // ========== apiSet tests ==========
 
     @Test
-    void apiSet_parsesCommandAndInvokesMethod() {
+    void apiSet_splitsCommandIntoMethodArgsAndValue() {
         // Arrange
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiSetResult(true);
         when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
 
+        // Command: "set,session,objectId,attrName,value"
+        // Should split to: method="set", args="session,objectId,attrName", value="value"
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
                 .apiType("set")
@@ -195,13 +230,14 @@ class DmApiServiceImplTest {
         assertEquals(true, response.getResult());
         assertEquals("Boolean", response.getResultType());
         assertTrue(mockSession.isApiSetCalled());
-        assertEquals("set,session,0900000180000001,object_name", mockSession.getLastApiSetCommand());
+        assertEquals("set", mockSession.getLastApiSetMethod());
+        assertEquals("session,0900000180000001,object_name", mockSession.getLastApiSetArgs());
         assertEquals("NewName", mockSession.getLastApiSetValue());
     }
 
     @Test
     void apiSet_handlesValueWithCommas() {
-        // Arrange - value contains commas (only last comma is separator)
+        // Arrange - value is everything after the last comma in the args portion
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiSetResult(true);
         when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
@@ -217,20 +253,21 @@ class DmApiServiceImplTest {
 
         // Assert
         assertTrue(mockSession.isApiSetCalled());
-        assertEquals("set,session,0900000180000001,title,Value with special", mockSession.getLastApiSetCommand());
+        assertEquals("set", mockSession.getLastApiSetMethod());
+        assertEquals("session,0900000180000001,title,Value with special", mockSession.getLastApiSetArgs());
         assertEquals(" chars", mockSession.getLastApiSetValue());
     }
 
     @Test
-    void apiSet_throwsExceptionForMalformedCommand() {
-        // Arrange - no comma in command
+    void apiSet_throwsExceptionForMissingValue() {
+        // Arrange - command with method but no value separator in args
         MockDfSession mockSession = new MockDfSession();
         when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
 
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
                 .apiType("set")
-                .command("invalidcommandwithnocomma")
+                .command("set,novalue")
                 .build();
 
         // Act & Assert
@@ -347,6 +384,11 @@ class DmApiServiceImplTest {
      * Mock session object that implements the IDfSession interface stub.
      * Used to verify reflection-based invocation works correctly.
      * The interface is defined in test sources with the same package/class name as DFC.
+     *
+     * Implements the actual DFC method signatures:
+     * - apiGet(String method, String args)
+     * - apiExec(String method, String args)
+     * - apiSet(String method, String args, String value)
      */
     public static class MockDfSession implements IDfSession {
         private String apiGetResult;
@@ -357,9 +399,12 @@ class DmApiServiceImplTest {
         private boolean apiExecCalled = false;
         private boolean apiSetCalled = false;
 
-        private String lastApiGetCommand;
-        private String lastApiExecCommand;
-        private String lastApiSetCommand;
+        private String lastApiGetMethod;
+        private String lastApiGetArgs;
+        private String lastApiExecMethod;
+        private String lastApiExecArgs;
+        private String lastApiSetMethod;
+        private String lastApiSetArgs;
         private String lastApiSetValue;
 
         // Setters for test configuration
@@ -388,16 +433,28 @@ class DmApiServiceImplTest {
             return apiSetCalled;
         }
 
-        public String getLastApiGetCommand() {
-            return lastApiGetCommand;
+        public String getLastApiGetMethod() {
+            return lastApiGetMethod;
         }
 
-        public String getLastApiExecCommand() {
-            return lastApiExecCommand;
+        public String getLastApiGetArgs() {
+            return lastApiGetArgs;
         }
 
-        public String getLastApiSetCommand() {
-            return lastApiSetCommand;
+        public String getLastApiExecMethod() {
+            return lastApiExecMethod;
+        }
+
+        public String getLastApiExecArgs() {
+            return lastApiExecArgs;
+        }
+
+        public String getLastApiSetMethod() {
+            return lastApiSetMethod;
+        }
+
+        public String getLastApiSetArgs() {
+            return lastApiSetArgs;
         }
 
         public String getLastApiSetValue() {
@@ -407,23 +464,26 @@ class DmApiServiceImplTest {
         // IDfSession interface implementation methods
 
         @Override
-        public String apiGet(String command) {
+        public String apiGet(String method, String args) {
             this.apiGetCalled = true;
-            this.lastApiGetCommand = command;
+            this.lastApiGetMethod = method;
+            this.lastApiGetArgs = args;
             return apiGetResult;
         }
 
         @Override
-        public boolean apiExec(String command) {
+        public boolean apiExec(String method, String args) {
             this.apiExecCalled = true;
-            this.lastApiExecCommand = command;
+            this.lastApiExecMethod = method;
+            this.lastApiExecArgs = args;
             return apiExecResult;
         }
 
         @Override
-        public boolean apiSet(String command, String value) {
+        public boolean apiSet(String method, String args, String value) {
             this.apiSetCalled = true;
-            this.lastApiSetCommand = command;
+            this.lastApiSetMethod = method;
+            this.lastApiSetArgs = args;
             this.lastApiSetValue = value;
             return apiSetResult;
         }
