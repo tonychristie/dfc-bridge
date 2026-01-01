@@ -643,6 +643,309 @@ class RestObjectServiceImplTest {
                    exception.getCode().equals("NOT_SUPPORTED"));
     }
 
+    // ==================== getTypeInfo Tests ====================
+
+    @Test
+    void getTypeInfo_returnsTypeWithCorrectSuperTypeExtraction() throws InterruptedException {
+        // Arrange - REST API returns parent as URL
+        String jsonResponse = """
+            {
+                "name": "dm_document",
+                "label": "Document",
+                "category": "standard",
+                "parent": "http://192.168.0.110:9080/dctm-rest/repositories/TestRepo/types/dm_sysobject",
+                "properties": [
+                    {
+                        "name": "object_name",
+                        "type": "string",
+                        "length": 255,
+                        "repeating": false,
+                        "notnull": false
+                    },
+                    {
+                        "name": "title",
+                        "type": "string",
+                        "length": 400,
+                        "repeating": false,
+                        "notnull": true
+                    },
+                    {
+                        "name": "authors",
+                        "type": "string",
+                        "length": 48,
+                        "repeating": true,
+                        "notnull": false
+                    }
+                ]
+            }
+            """;
+
+        mockWebServer.enqueue(new MockResponse()
+                .setBody(jsonResponse)
+                .addHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE));
+
+        // Act
+        var typeInfo = objectService.getTypeInfo("test-session", "dm_document");
+
+        // Assert
+        assertNotNull(typeInfo);
+        assertEquals("dm_document", typeInfo.getName());
+        assertEquals("dm_sysobject", typeInfo.getSuperType()); // Extracted from parent URL
+        assertEquals("standard", typeInfo.getCategory());
+        assertTrue(typeInfo.isSystemType());
+
+        // Verify attributes
+        assertNotNull(typeInfo.getAttributes());
+        assertEquals(3, typeInfo.getAttributes().size());
+
+        var objectNameAttr = typeInfo.getAttributes().get(0);
+        assertEquals("object_name", objectNameAttr.getName());
+        assertEquals("string", objectNameAttr.getDataType());
+        assertEquals(255, objectNameAttr.getLength());
+        assertFalse(objectNameAttr.isRepeating());
+        assertFalse(objectNameAttr.isRequired());
+
+        var titleAttr = typeInfo.getAttributes().get(1);
+        assertEquals("title", titleAttr.getName());
+        assertTrue(titleAttr.isRequired()); // notnull: true
+
+        var authorsAttr = typeInfo.getAttributes().get(2);
+        assertEquals("authors", authorsAttr.getName());
+        assertTrue(authorsAttr.isRepeating());
+
+        // Verify request
+        RecordedRequest request = mockWebServer.takeRequest();
+        assertEquals("GET", request.getMethod());
+        assertTrue(request.getPath().contains("/repositories/TestRepo/types/dm_document"));
+    }
+
+    @Test
+    void getTypeInfo_handles404() {
+        // Arrange
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(404)
+                .setBody("{\"message\": \"Type not found\"}")
+                .addHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE));
+
+        // Act & Assert
+        ObjectNotFoundException exception = assertThrows(ObjectNotFoundException.class,
+                () -> objectService.getTypeInfo("test-session", "nonexistent_type"));
+
+        assertTrue(exception.getMessage().contains("Type not found"));
+    }
+
+    @Test
+    void getTypeInfo_handlesTypeWithNoParent() throws InterruptedException {
+        // Arrange - root type has no parent
+        String jsonResponse = """
+            {
+                "name": "dm_sysobject",
+                "label": "System Object",
+                "category": "standard",
+                "properties": [
+                    {
+                        "name": "r_object_id",
+                        "type": "string",
+                        "length": 16,
+                        "repeating": false
+                    }
+                ]
+            }
+            """;
+
+        mockWebServer.enqueue(new MockResponse()
+                .setBody(jsonResponse)
+                .addHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE));
+
+        // Act
+        var typeInfo = objectService.getTypeInfo("test-session", "dm_sysobject");
+
+        // Assert
+        assertNotNull(typeInfo);
+        assertEquals("dm_sysobject", typeInfo.getName());
+        assertEquals("", typeInfo.getSuperType()); // No parent
+    }
+
+    // ==================== listTypes Tests ====================
+
+    @Test
+    void listTypes_returnsTypesWithPagination() throws InterruptedException {
+        // Arrange - page 1 with next link
+        String page1Response = """
+            {
+                "entries": [
+                    {
+                        "content": {
+                            "name": "dm_document",
+                            "category": "standard",
+                            "parent": "http://server/types/dm_sysobject",
+                            "properties": [{"name": "object_name", "type": "string", "length": 255}]
+                        }
+                    },
+                    {
+                        "content": {
+                            "name": "dm_folder",
+                            "category": "standard",
+                            "parent": "http://server/types/dm_sysobject",
+                            "properties": [{"name": "object_name", "type": "string", "length": 255}]
+                        }
+                    }
+                ],
+                "links": [
+                    {"rel": "self", "href": "http://server/types?page=1"},
+                    {"rel": "next", "href": "http://server/types?page=2"}
+                ]
+            }
+            """;
+
+        // Arrange - page 2 without next link (last page)
+        String page2Response = """
+            {
+                "entries": [
+                    {
+                        "content": {
+                            "name": "dm_cabinet",
+                            "category": "standard",
+                            "parent": "http://server/types/dm_folder",
+                            "properties": [{"name": "object_name", "type": "string", "length": 255}]
+                        }
+                    }
+                ],
+                "links": [
+                    {"rel": "self", "href": "http://server/types?page=2"},
+                    {"rel": "first", "href": "http://server/types?page=1"}
+                ]
+            }
+            """;
+
+        mockWebServer.enqueue(new MockResponse()
+                .setBody(page1Response)
+                .addHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE));
+        mockWebServer.enqueue(new MockResponse()
+                .setBody(page2Response)
+                .addHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE));
+
+        // Act
+        var types = objectService.listTypes("test-session", null);
+
+        // Assert
+        assertNotNull(types);
+        assertEquals(3, types.size()); // 2 from page 1 + 1 from page 2
+        assertEquals("dm_document", types.get(0).getName());
+        assertEquals("dm_folder", types.get(1).getName());
+        assertEquals("dm_cabinet", types.get(2).getName());
+
+        // Verify two requests were made (pagination)
+        assertEquals(2, mockWebServer.getRequestCount());
+    }
+
+    @Test
+    void listTypes_usesInlineParameter() throws InterruptedException {
+        // Arrange
+        String jsonResponse = """
+            {
+                "entries": [
+                    {
+                        "content": {
+                            "name": "dm_document",
+                            "category": "standard",
+                            "properties": []
+                        }
+                    }
+                ],
+                "links": []
+            }
+            """;
+
+        mockWebServer.enqueue(new MockResponse()
+                .setBody(jsonResponse)
+                .addHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE));
+
+        // Act
+        objectService.listTypes("test-session", null);
+
+        // Assert - verify inline=true is in the request
+        RecordedRequest request = mockWebServer.takeRequest();
+        assertTrue(request.getPath().contains("inline=true"),
+                "Request should include inline=true parameter");
+        assertTrue(request.getPath().contains("items-per-page=100"),
+                "Request should include items-per-page parameter");
+    }
+
+    @Test
+    void listTypes_withPatternFilter() throws InterruptedException {
+        // Arrange
+        String jsonResponse = """
+            {
+                "entries": [
+                    {
+                        "content": {
+                            "name": "dm_document",
+                            "category": "standard",
+                            "properties": []
+                        }
+                    }
+                ],
+                "links": []
+            }
+            """;
+
+        mockWebServer.enqueue(new MockResponse()
+                .setBody(jsonResponse)
+                .addHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE));
+
+        // Act
+        var types = objectService.listTypes("test-session", "dm_doc");
+
+        // Assert
+        assertNotNull(types);
+        assertEquals(1, types.size());
+
+        // Verify filter is in the request
+        RecordedRequest request = mockWebServer.takeRequest();
+        assertTrue(request.getPath().contains("filter="),
+                "Request should include filter parameter");
+        assertTrue(request.getPath().contains("dm_doc"),
+                "Filter should contain the pattern");
+    }
+
+    @Test
+    void listTypes_returnsEmptyListWhenNoTypes() {
+        // Arrange
+        String jsonResponse = """
+            {
+                "entries": [],
+                "links": []
+            }
+            """;
+
+        mockWebServer.enqueue(new MockResponse()
+                .setBody(jsonResponse)
+                .addHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE));
+
+        // Act
+        var types = objectService.listTypes("test-session", null);
+
+        // Assert
+        assertNotNull(types);
+        assertTrue(types.isEmpty());
+    }
+
+    @Test
+    void listTypes_handlesServerError() {
+        // Arrange
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(500)
+                .setBody("{\"message\": \"Internal Server Error\"}")
+                .addHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE));
+
+        // Act & Assert
+        DfcBridgeException exception = assertThrows(DfcBridgeException.class,
+                () -> objectService.listTypes("test-session", null));
+
+        assertTrue(exception.getMessage().contains("Failed to list types"));
+    }
+
     /**
      * Test helper that creates a RestSessionServiceImpl with a mock WebClient
      */
