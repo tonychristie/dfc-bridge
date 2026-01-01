@@ -240,27 +240,37 @@ public class RestObjectServiceImpl implements ObjectService {
         RestSessionHolder session = sessionService.getRestSession(sessionId);
 
         try {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> response = session.getWebClient().get()
-                    .uri(uriBuilder -> {
-                        var builder = uriBuilder.path("/repositories/{repo}/types");
-                        if (pattern != null && !pattern.isEmpty()) {
-                            builder.queryParam("filter", "starts-with(name,'" + pattern + "')");
-                        }
-                        return builder.build(session.getRepository());
-                    })
-                    .retrieve()
-                    .bodyToMono(Map.class)
-                    .block(Duration.ofSeconds(30));
-
             List<TypeInfo> results = new ArrayList<>();
+            int page = 1;
+            boolean hasMore = true;
 
-            if (response != null) {
+            while (hasMore) {
+                final int currentPage = page;
+                @SuppressWarnings("unchecked")
+                Map<String, Object> response = session.getWebClient().get()
+                        .uri(uriBuilder -> {
+                            var builder = uriBuilder.path("/repositories/{repo}/types")
+                                    .queryParam("inline", "true")
+                                    .queryParam("items-per-page", "100")
+                                    .queryParam("page", currentPage);
+                            if (pattern != null && !pattern.isEmpty()) {
+                                builder.queryParam("filter", "starts-with(name,'" + pattern + "')");
+                            }
+                            return builder.build(session.getRepository());
+                        })
+                        .retrieve()
+                        .bodyToMono(Map.class)
+                        .block(Duration.ofSeconds(60));
+
+                if (response == null) {
+                    break;
+                }
+
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> entries =
                         (List<Map<String, Object>>) response.get("entries");
 
-                if (entries != null) {
+                if (entries != null && !entries.isEmpty()) {
                     for (Map<String, Object> entry : entries) {
                         @SuppressWarnings("unchecked")
                         Map<String, Object> content =
@@ -270,6 +280,10 @@ public class RestObjectServiceImpl implements ObjectService {
                         }
                     }
                 }
+
+                // Check if there's a next page
+                hasMore = hasNextPage(response);
+                page++;
             }
 
             return results;
@@ -281,6 +295,22 @@ public class RestObjectServiceImpl implements ObjectService {
             throw new DfcBridgeException(ERROR_CODE,
                     "Failed to list types: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Checks if the REST response has a "next" link indicating more pages.
+     */
+    @SuppressWarnings("unchecked")
+    private boolean hasNextPage(Map<String, Object> response) {
+        List<Map<String, Object>> links = (List<Map<String, Object>>) response.get("links");
+        if (links != null) {
+            for (Map<String, Object> link : links) {
+                if ("next".equals(link.get("rel"))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     @Override
@@ -610,26 +640,45 @@ public class RestObjectServiceImpl implements ObjectService {
 
     @SuppressWarnings("unchecked")
     private TypeInfo extractTypeInfo(Map<String, Object> response) {
-        Map<String, Object> properties = (Map<String, Object>) response.get("properties");
-        if (properties == null) {
-            properties = response;
+        // REST API returns type info at top level, not nested in "properties"
+        String name = (String) response.getOrDefault("name", "");
+        String category = (String) response.getOrDefault("category", "");
+
+        // Super type comes from "parent" URL - extract type name from URL
+        // Format: http://host/dctm-rest/repositories/REPO/types/dm_sysobject
+        String superType = "";
+        String parentUrl = (String) response.get("parent");
+        if (parentUrl != null && !parentUrl.isEmpty()) {
+            int lastSlash = parentUrl.lastIndexOf('/');
+            if (lastSlash >= 0 && lastSlash < parentUrl.length() - 1) {
+                superType = parentUrl.substring(lastSlash + 1);
+            }
         }
 
-        String name = (String) properties.getOrDefault("name", "");
-        String superType = (String) properties.getOrDefault("super_name", "");
+        // Determine if system type based on category or name prefix
+        boolean systemType = "standard".equals(category) ||
+                            (name.startsWith("dm_") || name.startsWith("dmi_"));
 
+        // Attributes are in "properties" array (not "attributes")
         List<TypeInfo.AttributeInfo> attributes = new ArrayList<>();
-        List<Map<String, Object>> attrList =
-                (List<Map<String, Object>>) properties.get("attributes");
+        List<Map<String, Object>> propList =
+                (List<Map<String, Object>>) response.get("properties");
 
-        if (attrList != null) {
-            for (Map<String, Object> attr : attrList) {
+        if (propList != null) {
+            for (Map<String, Object> prop : propList) {
+                Object lengthObj = prop.get("length");
+                int length = 0;
+                if (lengthObj instanceof Number) {
+                    length = ((Number) lengthObj).intValue();
+                }
+
                 attributes.add(TypeInfo.AttributeInfo.builder()
-                        .name((String) attr.get("name"))
-                        .dataType((String) attr.get("type"))
-                        .length(((Number) attr.getOrDefault("length", 0)).intValue())
-                        .repeating(Boolean.TRUE.equals(attr.get("repeating")))
-                        .required(Boolean.TRUE.equals(attr.get("not_null")))
+                        .name((String) prop.get("name"))
+                        .dataType((String) prop.get("type"))
+                        .length(length)
+                        .repeating(Boolean.TRUE.equals(prop.get("repeating")))
+                        .required(Boolean.TRUE.equals(prop.get("notnull")))
+                        .defaultValue(null) // REST API doesn't provide default value inline
                         .build());
             }
         }
@@ -637,6 +686,8 @@ public class RestObjectServiceImpl implements ObjectService {
         return TypeInfo.builder()
                 .name(name)
                 .superType(superType)
+                .systemType(systemType)
+                .category(category)
                 .attributes(attributes)
                 .build();
     }
