@@ -12,6 +12,7 @@ import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -26,6 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * DFC classes must be available on the classpath at runtime.
  */
 @Service
+@ConditionalOnProperty(name = "documentum.backend", havingValue = "dfc", matchIfMissing = true)
 public class DfcSessionServiceImpl implements DfcSessionService {
 
     private static final Logger log = LoggerFactory.getLogger(DfcSessionServiceImpl.class);
