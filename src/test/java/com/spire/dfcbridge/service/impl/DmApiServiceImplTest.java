@@ -43,7 +43,7 @@ class DmApiServiceImplTest {
     // ========== apiGet tests ==========
 
     @Test
-    void apiGet_splitsCommandAndInvokesMethod() {
+    void apiGet_splitsCommandAndStripsSessionPlaceholder() {
         // Arrange
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiGetResult("test-result");
@@ -64,9 +64,9 @@ class DmApiServiceImplTest {
         assertEquals("String", response.getResultType());
         assertTrue(response.getExecutionTimeMs() >= 0);
         assertTrue(mockSession.isApiGetCalled());
-        // Verify command was split correctly
+        // Verify "session" placeholder was stripped
         assertEquals("getdocbaseconfig", mockSession.getLastApiGetMethod());
-        assertEquals("session", mockSession.getLastApiGetArgs());
+        assertEquals("", mockSession.getLastApiGetArgs());
     }
 
     @Test
@@ -85,11 +85,11 @@ class DmApiServiceImplTest {
         // Act
         ApiResponse response = dmApiService.execute(request);
 
-        // Assert
+        // Assert - "session" is stripped, leaving "invalid"
         assertNull(response.getResult());
         assertEquals("String", response.getResultType());
         assertEquals("get", mockSession.getLastApiGetMethod());
-        assertEquals("session,invalid", mockSession.getLastApiGetArgs());
+        assertEquals("invalid", mockSession.getLastApiGetArgs());
     }
 
     @Test
@@ -135,10 +135,168 @@ class DmApiServiceImplTest {
         assertTrue(mockSession.isApiGetCalled());
     }
 
+    // ========== Session identifier stripping tests ==========
+
+    @Test
+    void apiGet_stripsNumberedSessionHandle() {
+        // Arrange - traditional dmAPI format with "s0" session handle
+        MockDfSession mockSession = new MockDfSession();
+        mockSession.setApiGetResult("dump-result");
+        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+
+        DmApiRequest request = DmApiRequest.builder()
+                .sessionId("test-session")
+                .apiType("get")
+                .command("dump,s0,0904719980000230")
+                .build();
+
+        // Act
+        ApiResponse response = dmApiService.execute(request);
+
+        // Assert - "s0" should be stripped, leaving just the object ID
+        assertEquals("dump-result", response.getResult());
+        assertEquals("dump", mockSession.getLastApiGetMethod());
+        assertEquals("0904719980000230", mockSession.getLastApiGetArgs());
+    }
+
+    @Test
+    void apiGet_stripsCurrentSessionHandle() {
+        // Arrange - traditional dmAPI format with "c" (current session) handle
+        MockDfSession mockSession = new MockDfSession();
+        mockSession.setApiGetResult("login");
+        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+
+        DmApiRequest request = DmApiRequest.builder()
+                .sessionId("test-session")
+                .apiType("get")
+                .command("getlogin,c,dmadmin")
+                .build();
+
+        // Act
+        ApiResponse response = dmApiService.execute(request);
+
+        // Assert - "c" should be stripped
+        assertEquals("login", response.getResult());
+        assertEquals("getlogin", mockSession.getLastApiGetMethod());
+        assertEquals("dmadmin", mockSession.getLastApiGetArgs());
+    }
+
+    @Test
+    void apiGet_stripsUuidSessionId() {
+        // Arrange - dfc-bridge UUID included in command
+        MockDfSession mockSession = new MockDfSession();
+        mockSession.setApiGetResult("dump-result");
+        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+
+        DmApiRequest request = DmApiRequest.builder()
+                .sessionId("test-session")
+                .apiType("get")
+                .command("dump,2923435e-94fa-4b47-9c1d-af84c781f2db,0904719980000230")
+                .build();
+
+        // Act
+        ApiResponse response = dmApiService.execute(request);
+
+        // Assert - UUID should be stripped
+        assertEquals("dump-result", response.getResult());
+        assertEquals("dump", mockSession.getLastApiGetMethod());
+        assertEquals("0904719980000230", mockSession.getLastApiGetArgs());
+    }
+
+    @Test
+    void apiGet_preservesNonSessionFirstArg() {
+        // Arrange - first arg is not a session identifier (e.g., docbase name)
+        MockDfSession mockSession = new MockDfSession();
+        mockSession.setApiGetResult("config-value");
+        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+
+        DmApiRequest request = DmApiRequest.builder()
+                .sessionId("test-session")
+                .apiType("get")
+                .command("getserverconfig,myrepo,config_key")
+                .build();
+
+        // Act
+        ApiResponse response = dmApiService.execute(request);
+
+        // Assert - "myrepo" is NOT a session identifier, so should be preserved
+        assertEquals("config-value", response.getResult());
+        assertEquals("getserverconfig", mockSession.getLastApiGetMethod());
+        assertEquals("myrepo,config_key", mockSession.getLastApiGetArgs());
+    }
+
+    @Test
+    void apiGet_handlesCommandWithoutSessionId() {
+        // Arrange - command with real args (no session identifier)
+        MockDfSession mockSession = new MockDfSession();
+        mockSession.setApiGetResult("result");
+        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+
+        DmApiRequest request = DmApiRequest.builder()
+                .sessionId("test-session")
+                .apiType("get")
+                .command("getlogin,dmadmin")
+                .build();
+
+        // Act
+        ApiResponse response = dmApiService.execute(request);
+
+        // Assert - "dmadmin" is not a session identifier, so preserved
+        assertEquals("result", response.getResult());
+        assertEquals("getlogin", mockSession.getLastApiGetMethod());
+        assertEquals("dmadmin", mockSession.getLastApiGetArgs());
+    }
+
+    @Test
+    void apiGet_stripsSessionFromSingleArgCommand() {
+        // Arrange - command with only "session" as arg
+        MockDfSession mockSession = new MockDfSession();
+        mockSession.setApiGetResult("result");
+        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+
+        DmApiRequest request = DmApiRequest.builder()
+                .sessionId("test-session")
+                .apiType("get")
+                .command("getdocbasemap,session")
+                .build();
+
+        // Act
+        ApiResponse response = dmApiService.execute(request);
+
+        // Assert - "session" stripped, leaving empty args
+        assertEquals("result", response.getResult());
+        assertEquals("getdocbasemap", mockSession.getLastApiGetMethod());
+        assertEquals("", mockSession.getLastApiGetArgs());
+    }
+
+    @Test
+    void sessionIdentifier_recognizesVariousFormats() {
+        // Test the isSessionIdentifier method directly
+        assertTrue(dmApiService.isSessionIdentifier("session"));
+        assertTrue(dmApiService.isSessionIdentifier("SESSION"));
+        assertTrue(dmApiService.isSessionIdentifier("c"));
+        assertTrue(dmApiService.isSessionIdentifier("C"));
+        assertTrue(dmApiService.isSessionIdentifier("s0"));
+        assertTrue(dmApiService.isSessionIdentifier("s1"));
+        assertTrue(dmApiService.isSessionIdentifier("s99"));
+        assertTrue(dmApiService.isSessionIdentifier("S0"));
+        assertTrue(dmApiService.isSessionIdentifier("2923435e-94fa-4b47-9c1d-af84c781f2db"));
+        assertTrue(dmApiService.isSessionIdentifier("AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"));
+
+        // Non-session identifiers
+        assertFalse(dmApiService.isSessionIdentifier("dmadmin"));
+        assertFalse(dmApiService.isSessionIdentifier("0904719980000230"));
+        assertFalse(dmApiService.isSessionIdentifier("myrepo"));
+        assertFalse(dmApiService.isSessionIdentifier("s100"));  // Only s0-s99
+        assertFalse(dmApiService.isSessionIdentifier("sessions"));
+        assertFalse(dmApiService.isSessionIdentifier(""));
+        assertFalse(dmApiService.isSessionIdentifier(null));
+    }
+
     // ========== apiExec tests ==========
 
     @Test
-    void apiExec_splitsCommandAndInvokesMethod() {
+    void apiExec_splitsCommandAndStripsSession() {
         // Arrange
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiExecResult(true);
@@ -158,9 +316,9 @@ class DmApiServiceImplTest {
         assertEquals(true, response.getResult());
         assertEquals("Boolean", response.getResultType());
         assertTrue(mockSession.isApiExecCalled());
-        // Verify command was split correctly
+        // Verify "session" was stripped
         assertEquals("fetch", mockSession.getLastApiExecMethod());
-        assertEquals("session,0900000180000001", mockSession.getLastApiExecArgs());
+        assertEquals("0900000180000001", mockSession.getLastApiExecArgs());
     }
 
     @Test
@@ -208,14 +366,14 @@ class DmApiServiceImplTest {
     // ========== apiSet tests ==========
 
     @Test
-    void apiSet_splitsCommandIntoMethodArgsAndValue() {
+    void apiSet_splitsCommandAndStripsSession() {
         // Arrange
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiSetResult(true);
         when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
 
         // Command: "set,session,objectId,attrName,value"
-        // Should split to: method="set", args="session,objectId,attrName", value="value"
+        // After stripping "session": method="set", args="objectId,attrName", value="NewName"
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
                 .apiType("set")
@@ -231,7 +389,8 @@ class DmApiServiceImplTest {
         assertEquals("Boolean", response.getResultType());
         assertTrue(mockSession.isApiSetCalled());
         assertEquals("set", mockSession.getLastApiSetMethod());
-        assertEquals("session,0900000180000001,object_name", mockSession.getLastApiSetArgs());
+        // "session" should be stripped
+        assertEquals("0900000180000001,object_name", mockSession.getLastApiSetArgs());
         assertEquals("NewName", mockSession.getLastApiSetValue());
     }
 
@@ -251,10 +410,10 @@ class DmApiServiceImplTest {
         // Act
         ApiResponse response = dmApiService.execute(request);
 
-        // Assert
+        // Assert - "session" is stripped
         assertTrue(mockSession.isApiSetCalled());
         assertEquals("set", mockSession.getLastApiSetMethod());
-        assertEquals("session,0900000180000001,title,Value with special", mockSession.getLastApiSetArgs());
+        assertEquals("0900000180000001,title,Value with special", mockSession.getLastApiSetArgs());
         assertEquals(" chars", mockSession.getLastApiSetValue());
     }
 
