@@ -68,3 +68,7 @@ logging:
   level:
     com.spire.dfcbridge: DEBUG
     com.documentum: INFO
+  file:
+    name: logs/dfc-bridge.log
+  pattern:
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
