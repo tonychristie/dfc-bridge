@@ -18,6 +18,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -30,6 +32,8 @@ import java.util.List;
 @RequestMapping("/api/v1")
 @Tag(name = "Objects", description = "Documentum object operations")
 public class ObjectController {
+
+    private static final Logger log = LoggerFactory.getLogger(ObjectController.class);
 
     private final ObjectService objectService;
     private final DmApiService dmApiService;
@@ -256,7 +260,14 @@ public class ObjectController {
         )
     })
     public ResponseEntity<ApiResponse> executeDmApi(@Valid @RequestBody DmApiRequest request) {
+        log.debug("executeDmApi: Received request - apiType={}, command={}, sessionId={}",
+                request.getApiType(), request.getCommand(), request.getSessionId());
+
         ApiResponse response = dmApiService.execute(request);
+
+        log.debug("executeDmApi: Returning response - resultType={}, result={}, executionTimeMs={}",
+                response.getResultType(), response.getResult(), response.getExecutionTimeMs());
+
         return ResponseEntity.ok(response);
     }
 
