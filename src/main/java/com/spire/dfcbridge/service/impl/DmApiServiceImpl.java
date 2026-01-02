@@ -12,6 +12,8 @@ import org.springframework.stereotype.Service;
 
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -34,6 +36,16 @@ public class DmApiServiceImpl implements DmApiService {
 
     // DFC interface name - the apiGet/apiExec/apiSet methods are defined on this interface
     private static final String DFC_SESSION_IFACE = "com.documentum.fc.client.IDfSession";
+
+    // Traditional dmAPI session placeholders that should be stripped from commands
+    // These include: session, c (current session), s0-s99 (numbered sessions)
+    private static final Set<String> SESSION_PLACEHOLDERS = Set.of("session", "c");
+    private static final Pattern SESSION_NUMBER_PATTERN = Pattern.compile("^s\\d{1,2}$", Pattern.CASE_INSENSITIVE);
+
+    // UUID pattern for dfc-bridge session IDs
+    private static final Pattern UUID_PATTERN = Pattern.compile(
+            "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            Pattern.CASE_INSENSITIVE);
 
     private final DfcSessionService sessionService;
 
@@ -290,9 +302,19 @@ public class DmApiServiceImpl implements DmApiService {
     /**
      * Split a command string into method name and arguments.
      * The method name is everything before the first comma, arguments are everything after.
+     * Session identifiers are stripped from the arguments.
      *
-     * @param command the full command string (e.g., "getdocbaseconfig,session")
-     * @return array of [method, args]
+     * Traditional dmAPI commands include session identifiers like:
+     * - "session" - placeholder for current session
+     * - "c" - current session
+     * - "s0", "s1", etc. - numbered session handles
+     * - UUID - dfc-bridge session ID (e.g., "2923435e-94fa-4b47-9c1d-af84c781f2db")
+     *
+     * Since DFC's apiGet/apiExec/apiSet methods are already called on the session object,
+     * these identifiers are redundant and cause DM_API_E_BADID errors if passed through.
+     *
+     * @param command the full command string (e.g., "dump,s0,0904719980000230")
+     * @return array of [method, args] with session identifier stripped
      */
     private String[] splitCommand(String command) {
         int firstComma = command.indexOf(',');
@@ -300,9 +322,92 @@ public class DmApiServiceImpl implements DmApiService {
             // No comma - method name only, empty args
             return new String[] { command, "" };
         }
-        return new String[] {
-            command.substring(0, firstComma),
-            command.substring(firstComma + 1)
-        };
+
+        String method = command.substring(0, firstComma);
+        String args = command.substring(firstComma + 1);
+
+        // Strip session identifier from the beginning of args if present
+        args = stripSessionIdentifier(args);
+
+        return new String[] { method, args };
+    }
+
+    /**
+     * Strip a session identifier from the beginning of an arguments string.
+     *
+     * Session identifiers can be:
+     * - "session" - placeholder keyword
+     * - "c" - current session shorthand
+     * - "s0" through "s99" - numbered session handles
+     * - UUID - dfc-bridge session ID format
+     *
+     * Examples:
+     * - "session,0904719980000230" -> "0904719980000230"
+     * - "s0,0904719980000230" -> "0904719980000230"
+     * - "2923435e-94fa-4b47-9c1d-af84c781f2db,0904719980000230" -> "0904719980000230"
+     * - "0904719980000230" -> "0904719980000230" (no session identifier)
+     * - "dmadmin" -> "dmadmin" (not a session identifier)
+     *
+     * @param args the arguments string, potentially starting with a session identifier
+     * @return the arguments with any leading session identifier removed
+     */
+    String stripSessionIdentifier(String args) {
+        if (args == null || args.isEmpty()) {
+            return args;
+        }
+
+        // Find the first comma to isolate the potential session identifier
+        int firstComma = args.indexOf(',');
+        String potentialSessionId;
+        String remainder;
+
+        if (firstComma == -1) {
+            // Single argument - check if it's a session identifier
+            potentialSessionId = args;
+            remainder = "";
+        } else {
+            potentialSessionId = args.substring(0, firstComma);
+            remainder = args.substring(firstComma + 1);
+        }
+
+        // Check if the first argument is a session identifier
+        if (isSessionIdentifier(potentialSessionId)) {
+            log.debug("Stripped session identifier '{}' from dmAPI args", potentialSessionId);
+            return remainder;
+        }
+
+        // Not a session identifier - return original args
+        return args;
+    }
+
+    /**
+     * Check if a string is a session identifier.
+     *
+     * @param value the string to check
+     * @return true if the value is a session identifier
+     */
+    boolean isSessionIdentifier(String value) {
+        if (value == null || value.isEmpty()) {
+            return false;
+        }
+
+        String lowerValue = value.toLowerCase();
+
+        // Check for known placeholders (session, c)
+        if (SESSION_PLACEHOLDERS.contains(lowerValue)) {
+            return true;
+        }
+
+        // Check for numbered session handles (s0, s1, ..., s99)
+        if (SESSION_NUMBER_PATTERN.matcher(value).matches()) {
+            return true;
+        }
+
+        // Check for UUID format (dfc-bridge session ID)
+        if (UUID_PATTERN.matcher(value).matches()) {
+            return true;
+        }
+
+        return false;
     }
 }
