@@ -174,12 +174,32 @@ public class DfcSessionServiceImpl implements DfcSessionService {
 
     @Override
     public Object getDfcSession(String sessionId) {
+        log.debug("getDfcSession: Retrieving session for sessionId={}", sessionId);
+
         SessionHolder holder = sessions.get(sessionId);
         if (holder == null) {
+            log.debug("getDfcSession: Session not found for sessionId={}", sessionId);
             throw new SessionNotFoundException(sessionId);
         }
+
+        Object dfSession = holder.dfSession;
+        log.debug("getDfcSession: Found session object - class={}, sessionId={}",
+                dfSession.getClass().getName(), sessionId);
+        log.debug("getDfcSession: Session object superclass={}",
+                dfSession.getClass().getSuperclass() != null ?
+                        dfSession.getClass().getSuperclass().getName() : "none");
+
+        // Log implemented interfaces for diagnostic purposes
+        Class<?>[] interfaces = dfSession.getClass().getInterfaces();
+        if (log.isDebugEnabled()) {
+            log.debug("getDfcSession: Session object implements {} interfaces:", interfaces.length);
+            for (Class<?> iface : interfaces) {
+                log.debug("  - {}", iface.getName());
+            }
+        }
+
         touchSession(sessionId);
-        return holder.dfSession;
+        return dfSession;
     }
 
     /**
