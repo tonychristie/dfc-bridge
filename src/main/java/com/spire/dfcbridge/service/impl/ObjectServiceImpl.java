@@ -613,14 +613,22 @@ public class ObjectServiceImpl implements ObjectService {
         boolean isSystem = name.startsWith("dm_") || name.startsWith("dmi_");
         int attrCount = (Integer) invokeReflection(type, "getTypeAttrCount");
 
-        // getStartPos() returns the index where this type's own attributes begin.
-        // Attributes before this index are inherited from super types.
-        int startPos = (Integer) invokeReflection(type, "getStartPos");
+        // Determine the number of inherited attributes by getting the super type's attribute count.
+        // All attributes at indices 0 to (inheritedAttrCount-1) are inherited from the super type.
+        int inheritedAttrCount = 0;
+        try {
+            Object superType = invokeReflection(type, "getSuperType");
+            if (superType != null) {
+                inheritedAttrCount = (Integer) invokeReflection(superType, "getTypeAttrCount");
+            }
+        } catch (Exception e) {
+            log.warn("Could not get super type attr count for type {}, defaulting to 0: {}", name, e.getMessage());
+        }
 
         List<TypeInfo.AttributeInfo> attributes = new ArrayList<>();
         for (int i = 0; i < attrCount; i++) {
             Object attr = invokeReflection(type, "getTypeAttr", new Class<?>[]{int.class}, i);
-            boolean isInherited = i < startPos;
+            boolean isInherited = i < inheritedAttrCount;
             attributes.add(extractAttributeInfo(attr, isInherited));
         }
 
@@ -665,8 +673,8 @@ public class ObjectServiceImpl implements ObjectService {
 
     /**
      * Helper method to invoke a method via reflection, handling accessibility.
-     * DFC implementation classes are often proxies, so we search through the class
-     * and its declared methods to find what we need.
+     * DFC implementation classes are often proxies, so we search through the class,
+     * its interfaces, and superclasses to find what we need.
      */
     private Object invokeReflection(Object target, String methodName, Class<?>[] paramTypes, Object... args) throws Exception {
         // First try using getMethod which searches the entire class hierarchy
@@ -683,8 +691,40 @@ public class ObjectServiceImpl implements ObjectService {
                     return method.invoke(target, args);
                 }
             }
+            // Try searching through all interfaces (DFC proxies implement interfaces)
+            for (Class<?> iface : getAllInterfaces(target.getClass())) {
+                try {
+                    Method method = iface.getMethod(methodName, paramTypes);
+                    method.setAccessible(true);
+                    return method.invoke(target, args);
+                } catch (NoSuchMethodException ignored) {
+                    // Try next interface
+                }
+            }
             throw new NoSuchMethodException(methodName + " on " + target.getClass().getName());
         }
+    }
+
+    /**
+     * Get all interfaces implemented by a class, including inherited ones.
+     */
+    private List<Class<?>> getAllInterfaces(Class<?> clazz) {
+        List<Class<?>> interfaces = new ArrayList<>();
+        while (clazz != null) {
+            for (Class<?> iface : clazz.getInterfaces()) {
+                if (!interfaces.contains(iface)) {
+                    interfaces.add(iface);
+                    // Add super-interfaces too
+                    for (Class<?> superIface : iface.getInterfaces()) {
+                        if (!interfaces.contains(superIface)) {
+                            interfaces.add(superIface);
+                        }
+                    }
+                }
+            }
+            clazz = clazz.getSuperclass();
+        }
+        return interfaces;
     }
 
     /**
