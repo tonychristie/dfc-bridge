@@ -672,6 +672,10 @@ public class RestObjectServiceImpl implements ObjectService {
                     length = ((Number) lengthObj).intValue();
                 }
 
+                // REST API may provide 'inherited' or 'is_inherited' field
+                boolean inherited = Boolean.TRUE.equals(prop.get("inherited")) ||
+                                   Boolean.TRUE.equals(prop.get("is_inherited"));
+
                 attributes.add(TypeInfo.AttributeInfo.builder()
                         .name((String) prop.get("name"))
                         .dataType((String) prop.get("type"))
@@ -679,6 +683,7 @@ public class RestObjectServiceImpl implements ObjectService {
                         .repeating(Boolean.TRUE.equals(prop.get("repeating")))
                         .required(Boolean.TRUE.equals(prop.get("notnull")))
                         .defaultValue(null) // REST API doesn't provide default value inline
+                        .inherited(inherited)
                         .build());
             }
         }
