@@ -613,10 +613,15 @@ public class ObjectServiceImpl implements ObjectService {
         boolean isSystem = name.startsWith("dm_") || name.startsWith("dmi_");
         int attrCount = (Integer) invokeReflection(type, "getTypeAttrCount");
 
+        // getStartPos() returns the index where this type's own attributes begin.
+        // Attributes before this index are inherited from super types.
+        int startPos = (Integer) invokeReflection(type, "getStartPos");
+
         List<TypeInfo.AttributeInfo> attributes = new ArrayList<>();
         for (int i = 0; i < attrCount; i++) {
             Object attr = invokeReflection(type, "getTypeAttr", new Class<?>[]{int.class}, i);
-            attributes.add(extractAttributeInfo(attr));
+            boolean isInherited = i < startPos;
+            attributes.add(extractAttributeInfo(attr, isInherited));
         }
 
         return TypeInfo.builder()
@@ -627,12 +632,13 @@ public class ObjectServiceImpl implements ObjectService {
                 .build();
     }
 
-    private TypeInfo.AttributeInfo extractAttributeInfo(Object attr) throws Exception {
+    private TypeInfo.AttributeInfo extractAttributeInfo(Object attr, boolean isInherited) throws Exception {
         return TypeInfo.AttributeInfo.builder()
                 .name((String) invokeReflection(attr, "getName"))
                 .dataType(DfcTypeUtils.dataTypeToString((Integer) invokeReflection(attr, "getDataType")))
                 .length((Integer) invokeReflection(attr, "getLength"))
                 .repeating((Boolean) invokeReflection(attr, "isRepeating"))
+                .inherited(isInherited)
                 .build();
     }
 
