@@ -16,6 +16,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
@@ -72,9 +73,16 @@ public class RestSessionServiceImpl {
                 .encodeToString(credentials.getBytes(StandardCharsets.UTF_8));
 
         // Create WebClient for this session
+        // Increase buffer size to handle large responses (e.g., type listings)
         int timeoutSeconds = backendProperties.getRest().getTimeoutSeconds();
+        ExchangeStrategies strategies = ExchangeStrategies.builder()
+                .codecs(configurer -> configurer.defaultCodecs()
+                        .maxInMemorySize(16 * 1024 * 1024)) // 16MB buffer
+                .build();
+
         WebClient webClient = WebClient.builder()
                 .baseUrl(endpoint)
+                .exchangeStrategies(strategies)
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Basic " + encodedCredentials)
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
