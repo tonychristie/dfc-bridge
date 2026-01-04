@@ -24,9 +24,7 @@ import java.util.Map;
 /**
  * DFC implementation of ObjectService using reflection to call DFC APIs.
  *
- * <p>This service is conditionally loaded when DFC classes are available on the classpath.
- * It is used by {@link com.spire.dfcbridge.service.ObjectRoutingService} to route object operations
- * to the appropriate backend based on the session type.
+ * <p>Requires DFC classes to be available on the classpath at runtime.
  */
 @Service
 public class ObjectServiceImpl implements ObjectService {
