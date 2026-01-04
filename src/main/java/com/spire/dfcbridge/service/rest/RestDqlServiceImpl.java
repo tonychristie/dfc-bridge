@@ -6,7 +6,6 @@ import com.spire.dfcbridge.model.QueryResult;
 import com.spire.dfcbridge.service.DqlService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -23,18 +22,22 @@ import java.util.Map;
  * REST implementation of DqlService.
  * Executes DQL queries via Documentum REST Services.
  *
- * REST endpoint: POST /repositories/{repo}/dql
- * Content-Type: application/vnd.emc.documentum+json
+ * <p>REST endpoint: POST /repositories/{repo}/dql
+ * <p>Content-Type: application/vnd.emc.documentum+json
  *
- * Request body:
+ * <p>Request body:
+ * <pre>
  * {
  *   "dql-query": "SELECT r_object_id, object_name FROM dm_document"
  * }
+ * </pre>
  *
- * Auto-fetches all pages for complete results.
+ * <p>Auto-fetches all pages for complete results.
+ *
+ * <p>This service is used by {@link com.spire.dfcbridge.service.DqlRoutingService} to route DQL operations
+ * to the appropriate backend based on the session type.
  */
 @Service
-@ConditionalOnProperty(name = "documentum.backend", havingValue = "rest")
 public class RestDqlServiceImpl implements DqlService {
 
     private static final Logger log = LoggerFactory.getLogger(RestDqlServiceImpl.class);
