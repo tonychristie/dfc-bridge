@@ -29,8 +29,6 @@ import java.util.stream.Collectors;
  * <p>Commands are passed as comma-separated strings (e.g., "getdocbaseconfig,session")
  * and split into method name and arguments for the DFC call.
  *
- * <p>This service is used by {@link com.spire.dfcbridge.service.DmApiRoutingService} to route dmAPI operations
- * to the appropriate backend based on the session type.
  */
 @Service
 public class DmApiServiceImpl implements DmApiService {
