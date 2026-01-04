@@ -1,5 +1,7 @@
 package com.spire.dfcbridge.controller;
 
+import com.spire.dfcbridge.config.backend.BackendProperties;
+import com.spire.dfcbridge.config.backend.BackendType;
 import com.spire.dfcbridge.service.DfcAvailabilityService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -20,24 +22,39 @@ import java.util.Map;
 public class StatusController {
 
     private final DfcAvailabilityService dfcAvailability;
+    private final BackendProperties backendProperties;
 
-    public StatusController(DfcAvailabilityService dfcAvailability) {
+    public StatusController(DfcAvailabilityService dfcAvailability, BackendProperties backendProperties) {
         this.dfcAvailability = dfcAvailability;
+        this.backendProperties = backendProperties;
     }
 
     @GetMapping("/status")
     @Operation(
         summary = "Get bridge status",
-        description = "Returns the current status of the bridge including DFC availability"
+        description = "Returns the current status of the bridge including backend mode and DFC availability"
     )
     public ResponseEntity<Map<String, Object>> getStatus() {
         Map<String, Object> status = new HashMap<>();
         status.put("service", "dfc-bridge");
-        status.put("dfcAvailable", dfcAvailability.isDfcAvailable());
-        status.put("mode", dfcAvailability.isDfcAvailable() ? "full" : "degraded");
 
-        if (!dfcAvailability.isDfcAvailable()) {
-            status.put("dfcUnavailableReason", dfcAvailability.getUnavailableReason());
+        BackendType backend = backendProperties.getBackend();
+        status.put("backend", backend.name().toLowerCase());
+
+        if (backend == BackendType.REST) {
+            // REST backend mode
+            status.put("mode", "rest");
+            status.put("restEndpoint", backendProperties.getRest().getEndpoint());
+            status.put("dfcAvailable", dfcAvailability.isDfcAvailable());
+        } else {
+            // DFC backend mode
+            status.put("dfcAvailable", dfcAvailability.isDfcAvailable());
+            if (dfcAvailability.isDfcAvailable()) {
+                status.put("mode", "dfc");
+            } else {
+                status.put("mode", "degraded");
+                status.put("dfcUnavailableReason", dfcAvailability.getUnavailableReason());
+            }
         }
 
         return ResponseEntity.ok(status);

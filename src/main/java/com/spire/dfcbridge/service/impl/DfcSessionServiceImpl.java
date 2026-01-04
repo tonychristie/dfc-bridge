@@ -27,8 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * DFC classes must be available on the classpath at runtime.
  */
 @Service
-@ConditionalOnProperty(name = "documentum.backend", havingValue = "dfc", matchIfMissing = true)
-public class DfcSessionServiceImpl implements DfcSessionService {
+public class DfcSessionServiceImpl {
 
     private static final Logger log = LoggerFactory.getLogger(DfcSessionServiceImpl.class);
 
@@ -48,10 +47,15 @@ public class DfcSessionServiceImpl implements DfcSessionService {
         this.dfcAvailability = dfcAvailability;
     }
 
-    @Override
     public ConnectResponse connect(ConnectRequest request) {
         // Check DFC availability first
         dfcAvailability.requireDfc();
+
+        // Validate DFC-required fields
+        if (request.getDocbroker() == null || request.getDocbroker().isBlank()) {
+            throw new ConnectionException("Docbroker host is required for DFC backend connections");
+        }
+
         log.info("Connecting to repository {} via {}:{}",
                 request.getRepository(), request.getDocbroker(), request.getPort());
 
@@ -131,7 +135,6 @@ public class DfcSessionServiceImpl implements DfcSessionService {
         }
     }
 
-    @Override
     public void disconnect(String sessionId) {
         SessionHolder holder = sessions.remove(sessionId);
         if (holder != null) {
@@ -140,7 +143,6 @@ public class DfcSessionServiceImpl implements DfcSessionService {
         }
     }
 
-    @Override
     public SessionInfo getSessionInfo(String sessionId) {
         SessionHolder holder = sessions.get(sessionId);
         if (holder == null) {
@@ -149,7 +151,6 @@ public class DfcSessionServiceImpl implements DfcSessionService {
         return holder.sessionInfo;
     }
 
-    @Override
     public boolean isSessionValid(String sessionId) {
         SessionHolder holder = sessions.get(sessionId);
         if (holder == null) {
@@ -164,7 +165,6 @@ public class DfcSessionServiceImpl implements DfcSessionService {
         }
     }
 
-    @Override
     public void touchSession(String sessionId) {
         SessionHolder holder = sessions.get(sessionId);
         if (holder != null) {
@@ -172,7 +172,6 @@ public class DfcSessionServiceImpl implements DfcSessionService {
         }
     }
 
-    @Override
     public Object getDfcSession(String sessionId) {
         log.debug("getDfcSession: Retrieving session for sessionId={}", sessionId);
 
