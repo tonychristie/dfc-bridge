@@ -38,8 +38,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * - Session ID is just a local identifier for the cached WebClient
  */
 @Service
-@ConditionalOnProperty(name = "documentum.backend", havingValue = "rest")
-public class RestSessionServiceImpl implements DfcSessionService {
+public class RestSessionServiceImpl {
 
     private static final Logger log = LoggerFactory.getLogger(RestSessionServiceImpl.class);
 
@@ -51,14 +50,17 @@ public class RestSessionServiceImpl implements DfcSessionService {
         log.info("REST backend initialized with endpoint: {}", backendProperties.getRest().getEndpoint());
     }
 
-    @Override
     public ConnectResponse connect(ConnectRequest request) {
         log.info("Connecting to repository {} via REST", request.getRepository());
 
-        // Build the REST endpoint - allow override from connect request or use configured default
-        String endpoint = backendProperties.getRest().getEndpoint();
+        // Use endpoint from request (required for per-connection routing)
+        String endpoint = request.getEndpoint();
         if (endpoint == null || endpoint.isBlank()) {
-            throw new ConnectionException("REST endpoint not configured. Set documentum.rest.endpoint in application.yml");
+            // Fall back to config if not in request (for backwards compatibility)
+            endpoint = backendProperties.getRest().getEndpoint();
+        }
+        if (endpoint == null || endpoint.isBlank()) {
+            throw new ConnectionException("REST endpoint not provided. Specify 'endpoint' in connect request.");
         }
 
         // Remove trailing slash
@@ -138,7 +140,6 @@ public class RestSessionServiceImpl implements DfcSessionService {
         }
     }
 
-    @Override
     public void disconnect(String sessionId) {
         RestSessionHolder holder = sessions.remove(sessionId);
         if (holder != null) {
@@ -146,7 +147,6 @@ public class RestSessionServiceImpl implements DfcSessionService {
         }
     }
 
-    @Override
     public SessionInfo getSessionInfo(String sessionId) {
         RestSessionHolder holder = sessions.get(sessionId);
         if (holder == null) {
@@ -155,12 +155,10 @@ public class RestSessionServiceImpl implements DfcSessionService {
         return holder.getSessionInfo();
     }
 
-    @Override
     public boolean isSessionValid(String sessionId) {
         return sessions.containsKey(sessionId);
     }
 
-    @Override
     public void touchSession(String sessionId) {
         RestSessionHolder holder = sessions.get(sessionId);
         if (holder != null) {
@@ -168,7 +166,6 @@ public class RestSessionServiceImpl implements DfcSessionService {
         }
     }
 
-    @Override
     public Object getDfcSession(String sessionId) {
         // For REST, return the WebClient (callers should check backend type)
         RestSessionHolder holder = sessions.get(sessionId);
