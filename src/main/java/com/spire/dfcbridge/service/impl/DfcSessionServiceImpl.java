@@ -27,7 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * DFC classes must be available on the classpath at runtime.
  */
 @Service
-public class DfcSessionServiceImpl {
+public class DfcSessionServiceImpl implements DfcSessionService {
 
     private static final Logger log = LoggerFactory.getLogger(DfcSessionServiceImpl.class);
 
@@ -47,6 +47,7 @@ public class DfcSessionServiceImpl {
         this.dfcAvailability = dfcAvailability;
     }
 
+    @Override
     public ConnectResponse connect(ConnectRequest request) {
         // Check DFC availability first
         dfcAvailability.requireDfc();
@@ -135,6 +136,7 @@ public class DfcSessionServiceImpl {
         }
     }
 
+    @Override
     public void disconnect(String sessionId) {
         SessionHolder holder = sessions.remove(sessionId);
         if (holder != null) {
@@ -143,6 +145,7 @@ public class DfcSessionServiceImpl {
         }
     }
 
+    @Override
     public SessionInfo getSessionInfo(String sessionId) {
         SessionHolder holder = sessions.get(sessionId);
         if (holder == null) {
@@ -151,6 +154,7 @@ public class DfcSessionServiceImpl {
         return holder.sessionInfo;
     }
 
+    @Override
     public boolean isSessionValid(String sessionId) {
         SessionHolder holder = sessions.get(sessionId);
         if (holder == null) {
@@ -165,6 +169,7 @@ public class DfcSessionServiceImpl {
         }
     }
 
+    @Override
     public void touchSession(String sessionId) {
         SessionHolder holder = sessions.get(sessionId);
         if (holder != null) {
@@ -172,6 +177,7 @@ public class DfcSessionServiceImpl {
         }
     }
 
+    @Override
     public Object getDfcSession(String sessionId) {
         log.debug("getDfcSession: Retrieving session for sessionId={}", sessionId);
 
