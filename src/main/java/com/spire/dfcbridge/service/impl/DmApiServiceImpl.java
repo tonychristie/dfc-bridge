@@ -7,7 +7,6 @@ import com.spire.dfcbridge.service.DfcSessionService;
 import com.spire.dfcbridge.service.DmApiService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.lang.reflect.Method;
@@ -17,19 +16,23 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * Implementation of DmApiService using reflection to call DFC session API methods.
+ * DFC implementation of DmApiService using reflection to call DFC session API methods.
  *
- * This service handles dmAPI commands which are server-level API calls.
+ * <p>This service handles dmAPI commands which are server-level API calls.
  * The actual DFC method signatures are:
- * - apiGet(String method, String args) - returns a String result
- * - apiExec(String method, String args) - returns a boolean result
- * - apiSet(String method, String args, String value) - returns a boolean result
+ * <ul>
+ *   <li>apiGet(String method, String args) - returns a String result</li>
+ *   <li>apiExec(String method, String args) - returns a boolean result</li>
+ *   <li>apiSet(String method, String args, String value) - returns a boolean result</li>
+ * </ul>
  *
- * Commands are passed as comma-separated strings (e.g., "getdocbaseconfig,session")
+ * <p>Commands are passed as comma-separated strings (e.g., "getdocbaseconfig,session")
  * and split into method name and arguments for the DFC call.
+ *
+ * <p>This service is used by {@link com.spire.dfcbridge.service.DmApiRoutingService} to route dmAPI operations
+ * to the appropriate backend based on the session type.
  */
 @Service
-@ConditionalOnProperty(name = "documentum.backend", havingValue = "dfc", matchIfMissing = true)
 public class DmApiServiceImpl implements DmApiService {
 
     private static final Logger log = LoggerFactory.getLogger(DmApiServiceImpl.class);

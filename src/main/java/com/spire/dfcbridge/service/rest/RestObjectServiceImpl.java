@@ -11,7 +11,6 @@ import com.spire.dfcbridge.model.TypeInfo;
 import com.spire.dfcbridge.service.ObjectService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
@@ -24,9 +23,11 @@ import java.util.Map;
 /**
  * REST implementation of ObjectService.
  * Performs object operations via Documentum REST Services.
+ *
+ * <p>This service is used by {@link com.spire.dfcbridge.service.ObjectRoutingService} to route object operations
+ * to the appropriate backend based on the session type.
  */
 @Service
-@ConditionalOnProperty(name = "documentum.backend", havingValue = "rest")
 public class RestObjectServiceImpl implements ObjectService {
 
     private static final Logger log = LoggerFactory.getLogger(RestObjectServiceImpl.class);

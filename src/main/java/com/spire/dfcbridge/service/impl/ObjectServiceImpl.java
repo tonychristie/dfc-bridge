@@ -13,7 +13,6 @@ import com.spire.dfcbridge.service.ObjectService;
 import com.spire.dfcbridge.util.DfcTypeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.lang.reflect.Method;
@@ -23,10 +22,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Implementation of ObjectService using reflection to call DFC APIs.
+ * DFC implementation of ObjectService using reflection to call DFC APIs.
+ *
+ * <p>This service is conditionally loaded when DFC classes are available on the classpath.
+ * It is used by {@link com.spire.dfcbridge.service.ObjectRoutingService} to route object operations
+ * to the appropriate backend based on the session type.
  */
 @Service
-@ConditionalOnProperty(name = "documentum.backend", havingValue = "dfc", matchIfMissing = true)
 public class ObjectServiceImpl implements ObjectService {
 
     private static final Logger log = LoggerFactory.getLogger(ObjectServiceImpl.class);
