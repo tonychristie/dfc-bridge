@@ -45,7 +45,9 @@ class ConnectRequestTest {
     }
 
     @Test
-    void testMissingDocbroker() {
+    void testMissingDocbroker_isValidForRestBackend() {
+        // Docbroker is optional for REST backend (uses configured REST endpoint instead)
+        // Validation now happens at service level for DFC backend only
         ConnectRequest request = ConnectRequest.builder()
                 .port(1489)
                 .repository("TestRepo")
@@ -54,9 +56,7 @@ class ConnectRequestTest {
                 .build();
 
         var violations = validator.validate(request);
-        assertFalse(violations.isEmpty());
-        assertTrue(violations.stream()
-                .anyMatch(v -> v.getPropertyPath().toString().equals("docbroker")));
+        assertTrue(violations.isEmpty(), "Docbroker should be optional (validated at service level for DFC)");
     }
 
     @Test
