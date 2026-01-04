@@ -6,17 +6,18 @@ import com.spire.dfcbridge.exception.DfcBridgeException;
 import com.spire.dfcbridge.service.DmApiService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 /**
  * REST implementation of DmApiService.
  *
- * dmAPI commands (apiGet, apiExec, apiSet) are DFC-specific and have no REST equivalent.
+ * <p>dmAPI commands (apiGet, apiExec, apiSet) are DFC-specific and have no REST equivalent.
  * This implementation always throws an error directing users to use DFC or alternative methods.
+ *
+ * <p>This service is used by {@link com.spire.dfcbridge.service.DmApiRoutingService} to route dmAPI operations
+ * to the appropriate backend based on the session type.
  */
 @Service
-@ConditionalOnProperty(name = "documentum.backend", havingValue = "rest")
 public class RestDmApiServiceImpl implements DmApiService {
 
     private static final Logger log = LoggerFactory.getLogger(RestDmApiServiceImpl.class);
