@@ -121,6 +121,9 @@ public class RestDqlServiceImpl implements DqlService {
 
     /**
      * Execute a single DQL request to the REST API.
+     *
+     * <p>The Documentum REST API uses a GET request with the DQL query as a query parameter:
+     * GET /repositories/{repo}?dql={query}&items-per-page={n}&page={n}
      */
     @SuppressWarnings("unchecked")
     private Map<String, Object> executeDqlRequest(
@@ -129,20 +132,16 @@ public class RestDqlServiceImpl implements DqlService {
             int itemsPerPage,
             int page) {
 
-        // Build request body
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("dql-query", query);
-
         WebClient webClient = session.getWebClient();
 
-        return webClient.post()
+        return webClient.get()
                 .uri(uriBuilder -> uriBuilder
-                        .path("/repositories/{repo}/dql")
+                        .path("/repositories/{repo}")
+                        .queryParam("dql", query)
                         .queryParam("items-per-page", itemsPerPage)
                         .queryParam("page", page)
                         .build(session.getRepository()))
-                .contentType(DOCUMENTUM_MEDIA_TYPE)
-                .bodyValue(requestBody)
+                .accept(DOCUMENTUM_MEDIA_TYPE)
                 .retrieve()
                 .bodyToMono(Map.class)
                 .block(Duration.ofSeconds(30));
