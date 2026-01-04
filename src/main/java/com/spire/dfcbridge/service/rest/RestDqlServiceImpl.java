@@ -6,7 +6,6 @@ import com.spire.dfcbridge.model.QueryResult;
 import com.spire.dfcbridge.service.DqlService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -23,18 +22,22 @@ import java.util.Map;
  * REST implementation of DqlService.
  * Executes DQL queries via Documentum REST Services.
  *
- * REST endpoint: POST /repositories/{repo}/dql
- * Content-Type: application/vnd.emc.documentum+json
+ * <p>REST endpoint: POST /repositories/{repo}/dql
+ * <p>Content-Type: application/vnd.emc.documentum+json
  *
- * Request body:
+ * <p>Request body:
+ * <pre>
  * {
  *   "dql-query": "SELECT r_object_id, object_name FROM dm_document"
  * }
+ * </pre>
  *
- * Auto-fetches all pages for complete results.
+ * <p>Auto-fetches all pages for complete results.
+ *
+ * <p>This service is used by {@link com.spire.dfcbridge.service.DqlRoutingService} to route DQL operations
+ * to the appropriate backend based on the session type.
  */
 @Service
-@ConditionalOnProperty(name = "documentum.backend", havingValue = "rest")
 public class RestDqlServiceImpl implements DqlService {
 
     private static final Logger log = LoggerFactory.getLogger(RestDqlServiceImpl.class);
@@ -118,6 +121,9 @@ public class RestDqlServiceImpl implements DqlService {
 
     /**
      * Execute a single DQL request to the REST API.
+     *
+     * <p>The Documentum REST API uses a GET request with the DQL query as a query parameter:
+     * GET /repositories/{repo}?dql={query}&items-per-page={n}&page={n}
      */
     @SuppressWarnings("unchecked")
     private Map<String, Object> executeDqlRequest(
@@ -126,20 +132,16 @@ public class RestDqlServiceImpl implements DqlService {
             int itemsPerPage,
             int page) {
 
-        // Build request body
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("dql-query", query);
-
         WebClient webClient = session.getWebClient();
 
-        return webClient.post()
+        return webClient.get()
                 .uri(uriBuilder -> uriBuilder
-                        .path("/repositories/{repo}/dql")
+                        .path("/repositories/{repo}")
+                        .queryParam("dql", query)
                         .queryParam("items-per-page", itemsPerPage)
                         .queryParam("page", page)
                         .build(session.getRepository()))
-                .contentType(DOCUMENTUM_MEDIA_TYPE)
-                .bodyValue(requestBody)
+                .accept(DOCUMENTUM_MEDIA_TYPE)
                 .retrieve()
                 .bodyToMono(Map.class)
                 .block(Duration.ofSeconds(30));

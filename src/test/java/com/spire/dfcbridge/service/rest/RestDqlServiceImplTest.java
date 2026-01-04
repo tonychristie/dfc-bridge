@@ -92,14 +92,15 @@ class RestDqlServiceImplTest {
         assertEquals("Test Document", result.getRows().get(0).get("object_name"));
         assertFalse(result.isHasMore());
 
-        // Verify POST request was made
+        // Verify GET request was made with query parameter
         RecordedRequest recordedRequest = mockWebServer.takeRequest();
-        assertEquals("POST", recordedRequest.getMethod());
-        assertTrue(recordedRequest.getPath().contains("/repositories/TestRepo/dql"));
+        assertEquals("GET", recordedRequest.getMethod());
+        assertTrue(recordedRequest.getPath().contains("/repositories/TestRepo"));
+        assertTrue(recordedRequest.getPath().contains("dql="));
     }
 
     @Test
-    void executeQuery_usesCorrectContentType() throws InterruptedException {
+    void executeQuery_usesCorrectAcceptHeader() throws InterruptedException {
         // Arrange
         String jsonResponse = """
             {
@@ -119,14 +120,14 @@ class RestDqlServiceImplTest {
         // Act
         dqlService.executeQuery(request);
 
-        // Assert - verify Content-Type header
+        // Assert - verify Accept header for Documentum media type
         RecordedRequest recordedRequest = mockWebServer.takeRequest();
         assertEquals("application/vnd.emc.documentum+json",
-                recordedRequest.getHeader(HttpHeaders.CONTENT_TYPE));
+                recordedRequest.getHeader(HttpHeaders.ACCEPT));
     }
 
     @Test
-    void executeQuery_sendsQueryInBody() throws InterruptedException {
+    void executeQuery_sendsQueryAsParameter() throws InterruptedException {
         // Arrange
         String jsonResponse = """
             {
@@ -147,11 +148,12 @@ class RestDqlServiceImplTest {
         // Act
         dqlService.executeQuery(request);
 
-        // Assert - verify query is in request body
+        // Assert - verify query is in URL as query parameter (URL-encoded)
         RecordedRequest recordedRequest = mockWebServer.takeRequest();
-        String body = recordedRequest.getBody().readUtf8();
-        assertTrue(body.contains("dql-query"));
-        assertTrue(body.contains(testQuery));
+        String path = recordedRequest.getPath();
+        assertTrue(path.contains("dql="), "Path should contain dql parameter: " + path);
+        // URL-encoded query should contain parts of our query
+        assertTrue(path.contains("SELECT"), "Path should contain SELECT: " + path);
     }
 
     @Test
