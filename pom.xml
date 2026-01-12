@@ -11,7 +11,7 @@
         <relativePath/>
     </parent>
 
-    <groupId>com.spire</groupId>
+    <groupId>com.spirecentral</groupId>
     <artifactId>dfc-bridge</artifactId>
     <version>1.0.0</version>
     <name>DFC Bridge</name>
