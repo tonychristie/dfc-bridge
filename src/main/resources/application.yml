@@ -5,6 +5,8 @@ server:
 spring:
   application:
     name: dfc-bridge
+  main:
+    banner-mode: off
 
 # DFC Bridge Configuration
 dfc:
@@ -35,12 +37,16 @@ springdoc:
     operationsSorter: method
     tagsSorter: alpha
 
-# Logging
+# Logging - quiet by default, enable debug via --logging.level.com.spire.dfcbridge=DEBUG
 logging:
   level:
-    com.spire.dfcbridge: DEBUG
-    com.documentum: INFO
+    root: WARN
+    com.spire.dfcbridge: INFO
+    com.documentum: WARN
+    org.springframework: WARN
+    org.apache.tomcat: WARN
   file:
     name: logs/dfc-bridge.log
   pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level %logger{20} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
