@@ -48,7 +48,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DqlException.class)
     public ResponseEntity<ErrorResponse> handleDqlException(
             DqlException ex, HttpServletRequest request) {
-        log.error("DQL error: {}", ex.getMessage(), ex);
+        log.warn("DQL error: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ErrorResponse.builder()
                         .code(ex.getCode())

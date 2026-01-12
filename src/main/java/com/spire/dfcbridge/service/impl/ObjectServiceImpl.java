@@ -622,7 +622,7 @@ public class ObjectServiceImpl implements ObjectService {
                 inheritedAttrCount = (Integer) invokeReflection(superType, "getTypeAttrCount");
             }
         } catch (Exception e) {
-            log.warn("Could not get super type attr count for type {}, defaulting to 0: {}", name, e.getMessage());
+            log.debug("Could not get super type attr count for type {}, defaulting to 0: {}", name, e.getMessage());
         }
 
         List<TypeInfo.AttributeInfo> attributes = new ArrayList<>();
