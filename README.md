@@ -34,11 +34,13 @@ Client Application (e.g., VS Code Extension)
 
 - **Java 17+** (or Java 11+ with minor pom.xml adjustments)
 - **Maven 3.8+**
-- **DFC installed and configured** on the target machine
-  - DFC libraries (dfc.jar, etc.) must be on the classpath
-  - Valid `dfc.properties` file configured for your environment
+- **DFC JARs** from a Documentum installation (only 5 JARs required):
+  - `dfc.jar` - Core DFC library
+  - `aspectjrt.jar` - AspectJ runtime
+  - `log4j-api-*.jar`, `log4j-core-*.jar`, `log4j-1.2-api-*.jar` - Logging
+- **dfc.properties** file configured with your docbroker settings
 
-> **Note:** DFC libraries cannot be embedded due to licensing restrictions. This application expects DFC to be pre-installed on the system where it runs.
+> **Note:** DFC libraries cannot be embedded due to licensing restrictions. Copy only the required JARs from an existing Documentum installation. See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed setup instructions.
 
 ## Building
 
@@ -90,6 +92,7 @@ unzip target/dfc-bridge-*.jar -d target/extracted
 | `--mode=dfc` | Run with DFC libraries (default) |
 | `--mode=nodfc` | Run without DFC (degraded mode) |
 | `--port=PORT` | Set server port (default: 9876) |
+| `--verify` | Verify DFC setup without starting |
 | `--help` | Show help message |
 
 #### Environment Variables
