@@ -37,11 +37,11 @@ springdoc:
     operationsSorter: method
     tagsSorter: alpha
 
-# Logging - quiet by default, enable debug via --logging.level.com.spire.dfcbridge=DEBUG
+# Logging - quiet by default, enable debug via --logging.level.com.spirecentral.dfcbridge=DEBUG
 logging:
   level:
     root: WARN
-    com.spire.dfcbridge: INFO
+    com.spirecentral.dfcbridge: INFO
     com.documentum: WARN
     org.springframework: WARN
     org.apache.tomcat: WARN
