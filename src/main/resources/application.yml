@@ -6,24 +6,6 @@ spring:
   application:
     name: dfc-bridge
 
-# Documentum Backend Configuration
-# The bridge can use either DFC (traditional) or REST (Documentum REST Services) as backend
-documentum:
-  # Backend type: 'dfc' or 'rest'
-  # - dfc: Uses DFC libraries (requires DFC JARs on classpath)
-  # - rest: Uses Documentum REST Services (HTTP-based, no DFC required)
-  backend: dfc
-
-  # REST backend configuration (only used when backend: rest)
-  rest:
-    # Base URL of Documentum REST Services
-    # Example: http://192.168.0.110:9080/dctm-rest
-    endpoint: ${DOCUMENTUM_REST_ENDPOINT:}
-    # Request timeout in seconds
-    timeout-seconds: 30
-    # Whether to verify SSL certificates
-    verify-ssl: true
-
 # DFC Bridge Configuration
 dfc:
   session:
@@ -33,16 +15,6 @@ dfc:
     auto-reconnect: true
     # Maximum concurrent sessions per profile
     max-sessions-per-profile: 10
-
-  profiles:
-    # DFC profiles are configured per environment
-    # Each profile specifies the DFC installation to use
-    # Example profile configuration:
-    # default:
-    #   java-home: /opt/java/jdk11
-    #   dfc-path: /opt/dctm/product/7.3
-    #   dfc-properties: /opt/dctm/config/dfc.properties
-    enabled: []
 
 # Actuator endpoints
 management:
