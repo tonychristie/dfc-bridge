@@ -272,4 +272,4 @@ exec java \
   $JVM_OPTS \
   -Dserver.port="$SERVER_PORT" \
   -cp "$CP" \
-  com.spire.dfcbridge.DfcBridgeApplication
+  com.spirecentral.dfcbridge.DfcBridgeApplication
