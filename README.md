@@ -92,6 +92,7 @@ unzip target/dfc-bridge-*.jar -d target/extracted
 | `--mode=dfc` | Run with DFC libraries (default) |
 | `--mode=nodfc` | Run without DFC (degraded mode) |
 | `--port=PORT` | Set server port (default: 9876) |
+| `--verify` | Verify DFC setup without starting |
 | `--help` | Show help message |
 
 #### Environment Variables
