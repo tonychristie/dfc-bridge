@@ -123,31 +123,31 @@ public class DmApiServiceImpl implements DmApiService {
      * Uses reflection to understand what type of object we have and what methods are available.
      */
     private void logSessionDetails(Object dfSession) {
-        if (!log.isDebugEnabled()) {
+        if (!log.isTraceEnabled()) {
             return;
         }
 
-        log.debug("Session object class: {}", dfSession.getClass().getName());
-        log.debug("Session object superclass: {}",
+        log.trace("Session object class: {}", dfSession.getClass().getName());
+        log.trace("Session object superclass: {}",
                 dfSession.getClass().getSuperclass() != null ?
                         dfSession.getClass().getSuperclass().getName() : "none");
 
         // Log implemented interfaces
         Class<?>[] interfaces = dfSession.getClass().getInterfaces();
-        log.debug("Session object implements {} interfaces:", interfaces.length);
+        log.trace("Session object implements {} interfaces:", interfaces.length);
         for (Class<?> iface : interfaces) {
-            log.debug("  - {}", iface.getName());
+            log.trace("  - {}", iface.getName());
         }
 
         // Log available api* methods on the session object's class
-        log.debug("Looking for api* methods on session object class...");
+        log.trace("Looking for api* methods on session object class...");
         Method[] methods = dfSession.getClass().getMethods();
         for (Method method : methods) {
             if (method.getName().startsWith("api")) {
                 String params = Arrays.stream(method.getParameterTypes())
                         .map(Class::getSimpleName)
                         .collect(Collectors.joining(", "));
-                log.debug("  Found: {}({}) -> {}",
+                log.trace("  Found: {}({}) -> {}",
                         method.getName(), params, method.getReturnType().getSimpleName());
             }
         }
@@ -155,19 +155,19 @@ public class DmApiServiceImpl implements DmApiService {
         // Also check the IDfSession interface itself
         try {
             Class<?> sessionInterface = Class.forName(DFC_SESSION_IFACE);
-            log.debug("Looking for api* methods on IDfSession interface...");
+            log.trace("Looking for api* methods on IDfSession interface...");
             Method[] ifaceMethods = sessionInterface.getMethods();
             for (Method method : ifaceMethods) {
                 if (method.getName().startsWith("api")) {
                     String params = Arrays.stream(method.getParameterTypes())
                             .map(Class::getSimpleName)
                             .collect(Collectors.joining(", "));
-                    log.debug("  IDfSession.{}({}) -> {}",
+                    log.trace("  IDfSession.{}({}) -> {}",
                             method.getName(), params, method.getReturnType().getSimpleName());
                 }
             }
         } catch (ClassNotFoundException e) {
-            log.debug("Could not load IDfSession interface: {}", e.getMessage());
+            log.trace("Could not load IDfSession interface: {}", e.getMessage());
         }
     }
 
