@@ -47,45 +47,52 @@ Typical DFC installation locations:
 
 ## DFC Installation
 
-### Required Files
+### Required JARs
 
-Copy these files from a working Documentum installation:
-
-#### From Content Server or DFC Client Installation
+DFC Bridge requires only **5 JARs** from the DFC installation:
 
 ```
 $DFC_HOME/
-├── dfc.jar                    # Core DFC library (required)
-├── certjFIPS.jar              # Cryptography (required)
-├── cryptojFIPS.jar            # Cryptography (required)
-├── certj.jar                  # Certificates
-├── jsafeFIPS.jar              # Security
-├── aspectjrt.jar              # AOP runtime
-├── log4j.jar                  # Logging (DFC's version)
-├── log4j-1.2-api-*.jar        # Log4j compatibility
-├── configservice-api.jar      # Configuration service
-├── configservice-impl.jar     # Configuration service impl
-└── ... (other DFC dependencies)
+├── dfc.jar                    # Core DFC library (17 MB)
+├── aspectjrt.jar              # AspectJ runtime - required by DFC internals
+├── log4j-api-2.19.0.jar       # Log4j 2 API
+├── log4j-core-2.19.0.jar      # Log4j 2 Core
+└── log4j-1.2-api-2.19.0.jar   # Log4j 1.x compatibility bridge
 ```
 
-### Minimum Required JARs
-
-At minimum, you need:
-- `dfc.jar`
-- `certjFIPS.jar`
-- `cryptojFIPS.jar`
-- `log4j.jar` (DFC's version, NOT a newer one)
+> **Note:** Earlier DFC versions may use different log4j JAR names (e.g., `log4j.jar`). Use whichever log4j JARs are present in your DFC installation.
 
 ### Copying from an Existing Installation
 
-From a Content Server or DFC client installation:
-```bash
-# Linux
-cp -r /opt/dctm/product/23.2/shared/*.jar $HOME/documentum/shared/
+Copy only the required JARs from a Content Server or DFC client installation:
 
-# Windows
-xcopy "C:\Program Files\Documentum\shared\*.jar" "C:\Documentum\shared\" /Y
+```bash
+# Linux - copy only required JARs
+DFC_SOURCE=/opt/dctm/product/23.2/shared
+mkdir -p $HOME/documentum/shared
+cp $DFC_SOURCE/dfc.jar $HOME/documentum/shared/
+cp $DFC_SOURCE/aspectjrt.jar $HOME/documentum/shared/
+cp $DFC_SOURCE/log4j*.jar $HOME/documentum/shared/
 ```
+
+```powershell
+# Windows - copy only required JARs
+$DFC_SOURCE = "C:\Program Files\Documentum\shared"
+mkdir C:\Documentum\shared -Force
+Copy-Item "$DFC_SOURCE\dfc.jar" C:\Documentum\shared\
+Copy-Item "$DFC_SOURCE\aspectjrt.jar" C:\Documentum\shared\
+Copy-Item "$DFC_SOURCE\log4j*.jar" C:\Documentum\shared\
+```
+
+### Optional JARs
+
+These JARs are **not required** for dfc-bridge but may be needed for specific features:
+
+| JAR | When Needed |
+|-----|-------------|
+| `jcifs-krb5-*.jar`, `krbutil.jar` | Kerberos authentication |
+| `certjFIPS.jar`, `cryptojFIPS.jar` | FIPS-compliant cryptography environments |
+| `workflow.jar`, `bpmutil.jar` | Workflow operations (not exposed by dfc-bridge) |
 
 ---
 

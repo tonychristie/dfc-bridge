@@ -23,6 +23,10 @@ DFC_HOME="${DFC_HOME:-$HOME/documentum/shared}"
 DFC_CONFIG="${DFC_CONFIG:-$HOME/documentum/config}"
 SERVER_PORT="${SERVER_PORT:-9876}"
 
+# Required JARs for DFC mode
+REQUIRED_JARS=("dfc.jar" "aspectjrt.jar")
+REQUIRED_LOG4J_PATTERN="log4j"
+
 # Parse command line arguments
 show_help() {
     echo "DFC Bridge Startup Script"
@@ -33,6 +37,7 @@ show_help() {
     echo "  --mode=dfc     Run with DFC libraries (default)"
     echo "  --mode=nodfc   Run without DFC libraries (development/testing mode)"
     echo "  --port=PORT    Set server port (default: 9876, or \$SERVER_PORT)"
+    echo "  --verify       Verify DFC setup without starting the application"
     echo "  --help         Show this help message"
     echo ""
     echo "Environment Variables:"
@@ -40,12 +45,94 @@ show_help() {
     echo "  DFC_CONFIG     Path to DFC config directory (default: \$HOME/documentum/config)"
     echo "  SERVER_PORT    Server port (default: 9876)"
     echo ""
+    echo "Required JARs in DFC_HOME:"
+    echo "  - dfc.jar              Core DFC library"
+    echo "  - aspectjrt.jar        AspectJ runtime"
+    echo "  - log4j*.jar           Log4j libraries (api, core, 1.2-api)"
+    echo ""
     echo "Examples:"
     echo "  $0                       # Start with DFC (production)"
+    echo "  $0 --verify              # Check DFC setup"
     echo "  $0 --mode=nodfc          # Start without DFC (development)"
     echo "  $0 --mode=nodfc --port=8080  # Development mode on port 8080"
     echo ""
 }
+
+# Verify DFC setup
+verify_dfc_setup() {
+    local errors=0
+    echo "Verifying DFC setup..."
+    echo ""
+    echo "DFC_HOME: $DFC_HOME"
+    echo "DFC_CONFIG: $DFC_CONFIG"
+    echo ""
+
+    # Check DFC_HOME exists
+    if [ ! -d "$DFC_HOME" ]; then
+        echo "[ERROR] DFC_HOME directory not found: $DFC_HOME"
+        return 1
+    fi
+
+    # Check required JARs
+    echo "Checking required JARs:"
+    for jar in "${REQUIRED_JARS[@]}"; do
+        if [ -f "$DFC_HOME/$jar" ]; then
+            local size=$(du -h "$DFC_HOME/$jar" | cut -f1)
+            echo "  [OK] $jar ($size)"
+        else
+            echo "  [MISSING] $jar"
+            ((errors++))
+        fi
+    done
+
+    # Check log4j JARs
+    local log4j_count=$(ls "$DFC_HOME"/$REQUIRED_LOG4J_PATTERN*.jar 2>/dev/null | wc -l)
+    if [ "$log4j_count" -gt 0 ]; then
+        echo "  [OK] log4j JARs found ($log4j_count files):"
+        for jar in "$DFC_HOME"/$REQUIRED_LOG4J_PATTERN*.jar; do
+            [ -e "$jar" ] || continue
+            echo "       - $(basename "$jar")"
+        done
+    else
+        echo "  [MISSING] No log4j*.jar files found"
+        ((errors++))
+    fi
+
+    echo ""
+
+    # Check DFC_CONFIG
+    if [ ! -d "$DFC_CONFIG" ]; then
+        echo "[ERROR] DFC_CONFIG directory not found: $DFC_CONFIG"
+        ((errors++))
+    elif [ ! -f "$DFC_CONFIG/dfc.properties" ]; then
+        echo "[WARNING] dfc.properties not found in $DFC_CONFIG"
+        echo "  You may need to create this file with docbroker settings."
+    else
+        echo "[OK] dfc.properties found"
+        # Extract docbroker info
+        local docbroker=$(grep -E '^dfc.docbroker.host\[0\]' "$DFC_CONFIG/dfc.properties" 2>/dev/null | cut -d= -f2)
+        if [ -n "$docbroker" ]; then
+            echo "     Docbroker: $docbroker"
+        fi
+    fi
+
+    echo ""
+    if [ $errors -eq 0 ]; then
+        echo "DFC setup verification: PASSED"
+        echo "You can start the application with: $0"
+        return 0
+    else
+        echo "DFC setup verification: FAILED ($errors error(s))"
+        echo ""
+        echo "To fix, copy the required JARs from a Documentum installation:"
+        echo "  cp /path/to/documentum/shared/dfc.jar $DFC_HOME/"
+        echo "  cp /path/to/documentum/shared/aspectjrt.jar $DFC_HOME/"
+        echo "  cp /path/to/documentum/shared/log4j*.jar $DFC_HOME/"
+        return 1
+    fi
+}
+
+VERIFY_ONLY=false
 
 for arg in "$@"; do
     case $arg in
@@ -54,6 +141,9 @@ for arg in "$@"; do
             ;;
         --port=*)
             SERVER_PORT="${arg#*=}"
+            ;;
+        --verify)
+            VERIFY_ONLY=true
             ;;
         --help|-h)
             show_help
@@ -66,6 +156,12 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+# Handle verify-only mode
+if [ "$VERIFY_ONLY" = true ]; then
+    verify_dfc_setup
+    exit $?
+fi
 
 # Validate mode
 if [[ "$MODE" != "dfc" && "$MODE" != "nodfc" ]]; then
