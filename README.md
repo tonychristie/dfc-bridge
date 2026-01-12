@@ -43,14 +43,10 @@ Client Application (e.g., VS Code Extension)
 ## Building
 
 ```bash
-# Clone the repository
-git clone https://gitea.sevenbrooms.com/spire/dfc-bridge.git
-cd dfc-bridge
-
 # Build with Maven
 mvn clean package
 
-# The JAR will be in target/dfc-bridge-1.0.0-SNAPSHOT.jar
+# The JAR will be in target/dfc-bridge-1.0.0.jar
 ```
 
 ## Running
@@ -112,7 +108,7 @@ If you prefer not to use the startup script:
 ```bash
 export DFC_HOME=/opt/dctm/product/7.3
 export CLASSPATH=$DFC_HOME/shared/lib/dfc.jar:$DFC_HOME/shared/lib/*
-java -jar target/dfc-bridge-1.0.0-SNAPSHOT.jar
+java -jar target/dfc-bridge-1.0.0.jar
 ```
 
 **Using Maven (development):**
@@ -141,13 +137,13 @@ The default port is **9876**. Override using any of these methods:
 
 **Command line argument:**
 ```bash
-java -jar dfc-bridge-1.0.0-SNAPSHOT.jar --server.port=8080
+java -jar dfc-bridge-1.0.0.jar --server.port=8080
 ```
 
 **Environment variable:**
 ```bash
 export SERVER_PORT=8080
-java -jar dfc-bridge-1.0.0-SNAPSHOT.jar
+java -jar dfc-bridge-1.0.0.jar
 ```
 
 **application.yml override:**
@@ -341,4 +337,4 @@ MIT License - see LICENSE file for details.
 
 ## Related Projects
 
-- [dctm-vscode](https://gitea.sevenbrooms.com/tchristie/dctm-vscode) - VS Code extension for Documentum
+- dctm-vscode - VS Code extension for Documentum
