@@ -19,8 +19,7 @@ import io.swagger.v3.oas.annotations.info.License;
                       "Provides HTTP endpoints for DFC operations including session management, " +
                       "DQL queries, and object manipulation.",
         contact = @Contact(
-            name = "Spire",
-            url = "https://gitea.sevenbrooms.com/spire/dfc-bridge"
+            name = "SPIRE Solutions Ltd"
         ),
         license = @License(
             name = "MIT",
