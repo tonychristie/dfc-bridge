@@ -547,20 +547,62 @@ public class ObjectServiceImpl implements ObjectService {
 
     private ObjectInfo extractObjectInfo(Object sysObject, String objectId) throws Exception {
         String typeName = (String) invokeReflection(sysObject, "getTypeName");
-        String objectName = (String) invokeReflection(sysObject, "getObjectName");
-        int permit = (Integer) invokeReflection(sysObject, "getPermit");
+        String objectName = getNameForType(sysObject, typeName);
+        int permit = getPermitSafe(sysObject);
 
         // Get all attributes
         Map<String, Object> attributes = extractAllAttributes(sysObject);
 
-        return ObjectInfo.builder()
+        ObjectInfo.ObjectInfoBuilder builder = ObjectInfo.builder()
                 .objectId(objectId)
                 .type(typeName)
                 .name(objectName)
-                .attributes(attributes)
-                .permissionLevel(permit)
-                .permissionLabel(DfcTypeUtils.permitToLabel(permit))
-                .build();
+                .attributes(attributes);
+
+        // Only add permission info if the object supports it (sysobjects)
+        if (permit >= 0) {
+            builder.permissionLevel(permit)
+                   .permissionLabel(DfcTypeUtils.permitToLabel(permit));
+        }
+
+        return builder.build();
+    }
+
+    private int getPermitSafe(Object dfObject) {
+        try {
+            return (Integer) invokeReflection(dfObject, "getPermit");
+        } catch (Exception e) {
+            // Non-sysobject types don't have getPermit
+            return -1;
+        }
+    }
+
+    private String getNameForType(Object dfObject, String typeName) throws Exception {
+        // Check for type-specific name attributes in order of preference
+        // Different Documentum types use different attributes for their "name"
+        String[] nameAttrs = {"object_name", "name", "group_name", "user_name", "relation_name"};
+
+        for (String attr : nameAttrs) {
+            if (hasAttribute(dfObject, attr)) {
+                String value = (String) invokeReflection(dfObject, "getString",
+                        new Class<?>[]{String.class}, attr);
+                if (value != null && !value.isEmpty()) {
+                    return value;
+                }
+            }
+        }
+
+        // Fallback: return null if no name attribute found
+        return null;
+    }
+
+    private boolean hasAttribute(Object dfObject, String attrName) {
+        try {
+            return (Boolean) invokeReflection(dfObject, "hasAttr",
+                    new Class<?>[]{String.class}, attrName);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private Map<String, Object> extractAllAttributes(Object sysObject) throws Exception {
