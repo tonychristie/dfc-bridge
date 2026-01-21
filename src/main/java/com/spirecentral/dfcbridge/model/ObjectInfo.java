@@ -38,9 +38,9 @@ public class ObjectInfo {
     private Map<String, Object> attributes;
 
     /**
-     * User's permission level on this object
+     * User's permission level on this object (null for non-sysobject types)
      */
-    private int permissionLevel;
+    private Integer permissionLevel;
 
     /**
      * Human-readable permission label
