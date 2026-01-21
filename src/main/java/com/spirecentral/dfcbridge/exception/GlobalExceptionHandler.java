@@ -69,6 +69,30 @@ public class GlobalExceptionHandler {
                         .build());
     }
 
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleUserNotFound(
+            UserNotFoundException ex, HttpServletRequest request) {
+        log.warn("User not found: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.builder()
+                        .code(ex.getCode())
+                        .message(ex.getMessage())
+                        .path(request.getRequestURI())
+                        .build());
+    }
+
+    @ExceptionHandler(GroupNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleGroupNotFound(
+            GroupNotFoundException ex, HttpServletRequest request) {
+        log.warn("Group not found: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.builder()
+                        .code(ex.getCode())
+                        .message(ex.getMessage())
+                        .path(request.getRequestURI())
+                        .build());
+    }
+
     @ExceptionHandler(DfcUnavailableException.class)
     public ResponseEntity<ErrorResponse> handleDfcUnavailable(
             DfcUnavailableException ex, HttpServletRequest request) {
