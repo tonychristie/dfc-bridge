@@ -205,84 +205,61 @@ public class UserGroupServiceImpl implements UserGroupService {
         try {
             String sanitizedGroupName = DfcTypeUtils.sanitizeDqlString(groupName);
 
-            // First query: get basic group info
-            String basicDql = "SELECT r_object_id, group_name, description, group_class, " +
-                    "group_admin, is_private " +
+            // Single query for all attributes including repeating ones
+            String dql = "SELECT r_object_id, group_name, description, group_class, " +
+                    "group_admin, is_private, users_names, groups_names " +
                     "FROM dm_group WHERE group_name = '" + sanitizedGroupName + "'";
 
-            Object collection = executeQuery(dfSession, basicDql);
+            Object collection = executeQuery(dfSession, dql);
             Method nextMethod = collection.getClass().getMethod("next");
             Method closeMethod = collection.getClass().getMethod("close");
             Method getStringMethod = collection.getClass().getMethod("getString", String.class);
             Method getBooleanMethod = collection.getClass().getMethod("getBoolean", String.class);
-
-            String objectId;
-            GroupInfo.GroupInfoBuilder builder;
+            Method getValueCountMethod = collection.getClass().getMethod("getValueCount", String.class);
+            Method getRepeatingStringMethod = collection.getClass().getMethod("getRepeatingString", String.class, int.class);
 
             try {
                 if (!(Boolean) nextMethod.invoke(collection)) {
                     throw new GroupNotFoundException(groupName);
                 }
 
-                objectId = (String) getStringMethod.invoke(collection, "r_object_id");
-                builder = GroupInfo.builder()
+                // Extract single-value attributes
+                String objectId = (String) getStringMethod.invoke(collection, "r_object_id");
+                GroupInfo.GroupInfoBuilder builder = GroupInfo.builder()
                         .objectId(objectId)
                         .groupName((String) getStringMethod.invoke(collection, "group_name"))
                         .description((String) getStringMethod.invoke(collection, "description"))
                         .groupClass((String) getStringMethod.invoke(collection, "group_class"))
                         .groupAdmin((String) getStringMethod.invoke(collection, "group_admin"))
                         .isPrivate((Boolean) getBooleanMethod.invoke(collection, "is_private"));
-            } finally {
-                closeMethod.invoke(collection);
-            }
 
-            // Second query: get users_names repeating attribute
-            // DQL returns one row per repeating value when r_object_id is included
-            List<String> usersNames = new ArrayList<>();
-            String usersDql = "SELECT r_object_id, users_names FROM dm_group " +
-                    "WHERE group_name = '" + sanitizedGroupName + "'";
-
-            collection = executeQuery(dfSession, usersDql);
-            nextMethod = collection.getClass().getMethod("next");
-            closeMethod = collection.getClass().getMethod("close");
-            getStringMethod = collection.getClass().getMethod("getString", String.class);
-
-            try {
-                while ((Boolean) nextMethod.invoke(collection)) {
-                    String userName = (String) getStringMethod.invoke(collection, "users_names");
+                // Extract users_names repeating attribute
+                List<String> usersNames = new ArrayList<>();
+                int userCount = (Integer) getValueCountMethod.invoke(collection, "users_names");
+                for (int i = 0; i < userCount; i++) {
+                    String userName = (String) getRepeatingStringMethod.invoke(collection, "users_names", i);
                     if (userName != null && !userName.isEmpty()) {
                         usersNames.add(userName);
                     }
                 }
-            } finally {
-                closeMethod.invoke(collection);
-            }
 
-            // Third query: get groups_names repeating attribute
-            List<String> groupsNames = new ArrayList<>();
-            String groupsDql = "SELECT r_object_id, groups_names FROM dm_group " +
-                    "WHERE group_name = '" + sanitizedGroupName + "'";
-
-            collection = executeQuery(dfSession, groupsDql);
-            nextMethod = collection.getClass().getMethod("next");
-            closeMethod = collection.getClass().getMethod("close");
-            getStringMethod = collection.getClass().getMethod("getString", String.class);
-
-            try {
-                while ((Boolean) nextMethod.invoke(collection)) {
-                    String subGroupName = (String) getStringMethod.invoke(collection, "groups_names");
+                // Extract groups_names repeating attribute
+                List<String> groupsNames = new ArrayList<>();
+                int groupCount = (Integer) getValueCountMethod.invoke(collection, "groups_names");
+                for (int i = 0; i < groupCount; i++) {
+                    String subGroupName = (String) getRepeatingStringMethod.invoke(collection, "groups_names", i);
                     if (subGroupName != null && !subGroupName.isEmpty()) {
                         groupsNames.add(subGroupName);
                     }
                 }
+
+                return builder
+                        .usersNames(usersNames)
+                        .groupsNames(groupsNames)
+                        .build();
             } finally {
                 closeMethod.invoke(collection);
             }
-
-            return builder
-                    .usersNames(usersNames)
-                    .groupsNames(groupsNames)
-                    .build();
 
         } catch (GroupNotFoundException e) {
             throw e;
