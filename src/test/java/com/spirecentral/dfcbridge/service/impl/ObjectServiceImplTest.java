@@ -8,6 +8,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -181,6 +185,175 @@ class ObjectServiceImplTest {
         // Sysobjects have getPermit, so permissionLevel should be set
         assertEquals(7, result.getPermissionLevel());
         assertEquals("DELETE", result.getPermissionLabel());
+    }
+
+    // ========== Repeating Attributes Tests ==========
+
+    @Test
+    void getObject_withRepeatingStringAttribute_returnsAllValues() {
+        // Arrange
+        MockDfSession mockSession = new MockDfSession();
+        MockDfObjectWithAttributes mockObject = new MockDfObjectWithAttributes();
+        mockObject.setTypeName("dm_document");
+        mockObject.setPermit(7);
+
+        // Add a repeating string attribute with multiple values
+        mockObject.addAttribute("r_version_label", 2, true, "1.0", "CURRENT");
+        mockObject.addAttribute("object_name", 2, false, "test.pdf");
+
+        mockSession.setObjectToReturn(mockObject);
+        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+
+        // Act
+        ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
+
+        // Assert
+        assertNotNull(result);
+        assertNotNull(result.getAttributes());
+
+        Object versionLabels = result.getAttributes().get("r_version_label");
+        assertNotNull(versionLabels);
+        assertInstanceOf(List.class, versionLabels);
+
+        @SuppressWarnings("unchecked")
+        List<Object> labels = (List<Object>) versionLabels;
+        assertEquals(2, labels.size());
+        assertEquals("1.0", labels.get(0));
+        assertEquals("CURRENT", labels.get(1));
+    }
+
+    @Test
+    void getObject_withEmptyRepeatingAttribute_returnsEmptyList() {
+        // Arrange
+        MockDfSession mockSession = new MockDfSession();
+        MockDfObjectWithAttributes mockObject = new MockDfObjectWithAttributes();
+        mockObject.setTypeName("dm_document");
+        mockObject.setPermit(7);
+
+        // Add an empty repeating attribute
+        mockObject.addAttribute("keywords", 2, true); // no values
+        mockObject.addAttribute("object_name", 2, false, "test.pdf");
+
+        mockSession.setObjectToReturn(mockObject);
+        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+
+        // Act
+        ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
+
+        // Assert
+        assertNotNull(result);
+        Object keywords = result.getAttributes().get("keywords");
+        assertNotNull(keywords);
+        assertInstanceOf(List.class, keywords);
+
+        @SuppressWarnings("unchecked")
+        List<Object> keywordList = (List<Object>) keywords;
+        assertTrue(keywordList.isEmpty());
+    }
+
+    @Test
+    void getObject_withSingleValueAttribute_returnsScalar() {
+        // Arrange
+        MockDfSession mockSession = new MockDfSession();
+        MockDfObjectWithAttributes mockObject = new MockDfObjectWithAttributes();
+        mockObject.setTypeName("dm_document");
+        mockObject.setPermit(7);
+
+        // Add single-value attributes of different types
+        mockObject.addAttribute("object_name", 2, false, "test.pdf");      // STRING
+        mockObject.addAttribute("r_content_size", 1, false, 12345);        // INTEGER
+        mockObject.addAttribute("a_is_hidden", 0, false, false);           // BOOLEAN
+
+        mockSession.setObjectToReturn(mockObject);
+        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+
+        // Act
+        ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
+
+        // Assert
+        assertNotNull(result);
+        Map<String, Object> attrs = result.getAttributes();
+
+        assertEquals("test.pdf", attrs.get("object_name"));
+        assertEquals(12345, attrs.get("r_content_size"));
+        assertEquals(false, attrs.get("a_is_hidden"));
+    }
+
+    @Test
+    void getObject_withRepeatingIntegerAttribute_returnsAllValues() {
+        // Arrange
+        MockDfSession mockSession = new MockDfSession();
+        MockDfObjectWithAttributes mockObject = new MockDfObjectWithAttributes();
+        mockObject.setTypeName("dm_document");
+        mockObject.setPermit(7);
+
+        // Add a repeating integer attribute
+        mockObject.addAttribute("i_position", 1, true, 0, 1, 2);
+        mockObject.addAttribute("object_name", 2, false, "test.pdf");
+
+        mockSession.setObjectToReturn(mockObject);
+        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+
+        // Act
+        ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
+
+        // Assert
+        assertNotNull(result);
+        Object positions = result.getAttributes().get("i_position");
+        assertNotNull(positions);
+        assertInstanceOf(List.class, positions);
+
+        @SuppressWarnings("unchecked")
+        List<Object> positionList = (List<Object>) positions;
+        assertEquals(3, positionList.size());
+        assertEquals(0, positionList.get(0));
+        assertEquals(1, positionList.get(1));
+        assertEquals(2, positionList.get(2));
+    }
+
+    @Test
+    void getObject_withMixedAttributes_handlesBothCorrectly() {
+        // Arrange
+        MockDfSession mockSession = new MockDfSession();
+        MockDfObjectWithAttributes mockObject = new MockDfObjectWithAttributes();
+        mockObject.setTypeName("dm_document");
+        mockObject.setPermit(7);
+
+        // Mix of single and repeating attributes
+        mockObject.addAttribute("object_name", 2, false, "report.pdf");
+        mockObject.addAttribute("r_version_label", 2, true, "1.0", "1.1", "CURRENT");
+        mockObject.addAttribute("title", 2, false, "Annual Report");
+        mockObject.addAttribute("authors", 2, true, "John Doe", "Jane Smith");
+        mockObject.addAttribute("r_content_size", 1, false, 98765);
+
+        mockSession.setObjectToReturn(mockObject);
+        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+
+        // Act
+        ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
+
+        // Assert
+        assertNotNull(result);
+        Map<String, Object> attrs = result.getAttributes();
+
+        // Single values should be scalars
+        assertEquals("report.pdf", attrs.get("object_name"));
+        assertEquals("Annual Report", attrs.get("title"));
+        assertEquals(98765, attrs.get("r_content_size"));
+
+        // Repeating values should be lists
+        @SuppressWarnings("unchecked")
+        List<Object> versionLabels = (List<Object>) attrs.get("r_version_label");
+        assertEquals(3, versionLabels.size());
+        assertEquals("1.0", versionLabels.get(0));
+        assertEquals("1.1", versionLabels.get(1));
+        assertEquals("CURRENT", versionLabels.get(2));
+
+        @SuppressWarnings("unchecked")
+        List<Object> authors = (List<Object>) attrs.get("authors");
+        assertEquals(2, authors.size());
+        assertEquals("John Doe", authors.get(0));
+        assertEquals("Jane Smith", authors.get(1));
     }
 
     // ========== Mock DFC Objects ==========
@@ -478,5 +651,186 @@ class ObjectServiceImplTest {
         int getAttrCount();
         String getString(String attrName);
         boolean hasAttr(String attrName);
+    }
+
+    /**
+     * Mock object that supports configurable attributes for testing attribute extraction.
+     * Supports both single-value and repeating attributes of various types.
+     */
+    public static class MockDfObjectWithAttributes implements MockDfPersistentObject {
+        private String typeName;
+        private int permit;
+        private final List<MockAttribute> attributes = new ArrayList<>();
+
+        public void setTypeName(String typeName) {
+            this.typeName = typeName;
+        }
+
+        public void setPermit(int permit) {
+            this.permit = permit;
+        }
+
+        /**
+         * Add an attribute with values.
+         * @param name attribute name
+         * @param dataType 0=BOOLEAN, 1=INTEGER, 2=STRING, 3=DOUBLE, 4=TIME, 5=ID
+         * @param repeating whether the attribute is repeating
+         * @param values the values (for repeating, can be multiple; for single, just one)
+         */
+        public void addAttribute(String name, int dataType, boolean repeating, Object... values) {
+            attributes.add(new MockAttribute(name, dataType, repeating, values));
+        }
+
+        @Override
+        public String getTypeName() {
+            return typeName;
+        }
+
+        @Override
+        public int getPermit() {
+            return permit;
+        }
+
+        @Override
+        public int getAttrCount() {
+            return attributes.size();
+        }
+
+        public MockAttribute getAttr(int index) {
+            return attributes.get(index);
+        }
+
+        @Override
+        public String getString(String attrName) {
+            for (MockAttribute attr : attributes) {
+                if (attr.getName().equals(attrName) && attr.getDataType() == 2) {
+                    Object[] values = attr.getValues();
+                    return values.length > 0 ? (String) values[0] : null;
+                }
+            }
+            return null;
+        }
+
+        public int getInt(String attrName) {
+            for (MockAttribute attr : attributes) {
+                if (attr.getName().equals(attrName) && attr.getDataType() == 1) {
+                    Object[] values = attr.getValues();
+                    return values.length > 0 ? (Integer) values[0] : 0;
+                }
+            }
+            return 0;
+        }
+
+        public boolean getBoolean(String attrName) {
+            for (MockAttribute attr : attributes) {
+                if (attr.getName().equals(attrName) && attr.getDataType() == 0) {
+                    Object[] values = attr.getValues();
+                    return values.length > 0 && (Boolean) values[0];
+                }
+            }
+            return false;
+        }
+
+        public double getDouble(String attrName) {
+            for (MockAttribute attr : attributes) {
+                if (attr.getName().equals(attrName) && attr.getDataType() == 3) {
+                    Object[] values = attr.getValues();
+                    return values.length > 0 ? (Double) values[0] : 0.0;
+                }
+            }
+            return 0.0;
+        }
+
+        public int getValueCount(String attrName) {
+            for (MockAttribute attr : attributes) {
+                if (attr.getName().equals(attrName)) {
+                    return attr.getValues().length;
+                }
+            }
+            return 0;
+        }
+
+        public String getRepeatingString(String attrName, int index) {
+            for (MockAttribute attr : attributes) {
+                if (attr.getName().equals(attrName) && attr.getDataType() == 2) {
+                    Object[] values = attr.getValues();
+                    return index < values.length ? (String) values[index] : null;
+                }
+            }
+            return null;
+        }
+
+        public int getRepeatingInt(String attrName, int index) {
+            for (MockAttribute attr : attributes) {
+                if (attr.getName().equals(attrName) && attr.getDataType() == 1) {
+                    Object[] values = attr.getValues();
+                    return index < values.length ? (Integer) values[index] : 0;
+                }
+            }
+            return 0;
+        }
+
+        public boolean getRepeatingBoolean(String attrName, int index) {
+            for (MockAttribute attr : attributes) {
+                if (attr.getName().equals(attrName) && attr.getDataType() == 0) {
+                    Object[] values = attr.getValues();
+                    return index < values.length && (Boolean) values[index];
+                }
+            }
+            return false;
+        }
+
+        public double getRepeatingDouble(String attrName, int index) {
+            for (MockAttribute attr : attributes) {
+                if (attr.getName().equals(attrName) && attr.getDataType() == 3) {
+                    Object[] values = attr.getValues();
+                    return index < values.length ? (Double) values[index] : 0.0;
+                }
+            }
+            return 0.0;
+        }
+
+        @Override
+        public boolean hasAttr(String attrName) {
+            for (MockAttribute attr : attributes) {
+                if (attr.getName().equals(attrName)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Mock attribute for testing attribute extraction.
+     */
+    public static class MockAttribute {
+        private final String name;
+        private final int dataType;
+        private final boolean repeating;
+        private final Object[] values;
+
+        public MockAttribute(String name, int dataType, boolean repeating, Object... values) {
+            this.name = name;
+            this.dataType = dataType;
+            this.repeating = repeating;
+            this.values = values != null ? values : new Object[0];
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public int getDataType() {
+            return dataType;
+        }
+
+        public boolean isRepeating() {
+            return repeating;
+        }
+
+        public Object[] getValues() {
+            return values;
+        }
     }
 }
