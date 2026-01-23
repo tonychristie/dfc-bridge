@@ -692,6 +692,18 @@ public class ObjectServiceImpl implements ObjectService {
     }
 
     private void setObjectAttribute(Object sysObject, String attrName, Object value) throws Exception {
+        // Check if this is a repeating attribute
+        boolean isRepeating = (Boolean) invokeReflection(sysObject, "isAttrRepeating",
+                new Class<?>[]{String.class}, attrName);
+
+        if (isRepeating) {
+            setRepeatingAttribute(sysObject, attrName, value);
+        } else {
+            setScalarAttribute(sysObject, attrName, value);
+        }
+    }
+
+    private void setScalarAttribute(Object sysObject, String attrName, Object value) throws Exception {
         // Determine the setter method based on value type
         if (value instanceof String) {
             Method setStringMethod = sysObject.getClass().getMethod("setString", String.class, String.class);
@@ -709,6 +721,43 @@ public class ObjectServiceImpl implements ObjectService {
             // Default to string
             Method setStringMethod = sysObject.getClass().getMethod("setString", String.class, String.class);
             setStringMethod.invoke(sysObject, attrName, value.toString());
+        }
+    }
+
+    private void setRepeatingAttribute(Object sysObject, String attrName, Object value) throws Exception {
+        // Clear existing values first
+        Method removeAllMethod = sysObject.getClass().getMethod("removeAll", String.class);
+        removeAllMethod.invoke(sysObject, attrName);
+
+        // Handle list input
+        if (value instanceof List<?> valueList) {
+            for (int i = 0; i < valueList.size(); i++) {
+                Object item = valueList.get(i);
+                setRepeatingValueAtIndex(sysObject, attrName, i, item);
+            }
+        } else {
+            // Scalar value - set as single-element repeating attribute
+            setRepeatingValueAtIndex(sysObject, attrName, 0, value);
+        }
+    }
+
+    private void setRepeatingValueAtIndex(Object sysObject, String attrName, int index, Object value) throws Exception {
+        if (value instanceof String) {
+            Method method = sysObject.getClass().getMethod("setRepeatingString", String.class, int.class, String.class);
+            method.invoke(sysObject, attrName, index, value);
+        } else if (value instanceof Integer) {
+            Method method = sysObject.getClass().getMethod("setRepeatingInt", String.class, int.class, int.class);
+            method.invoke(sysObject, attrName, index, value);
+        } else if (value instanceof Boolean) {
+            Method method = sysObject.getClass().getMethod("setRepeatingBoolean", String.class, int.class, boolean.class);
+            method.invoke(sysObject, attrName, index, value);
+        } else if (value instanceof Double) {
+            Method method = sysObject.getClass().getMethod("setRepeatingDouble", String.class, int.class, double.class);
+            method.invoke(sysObject, attrName, index, value);
+        } else {
+            // Default to string
+            Method method = sysObject.getClass().getMethod("setRepeatingString", String.class, int.class, String.class);
+            method.invoke(sysObject, attrName, index, value.toString());
         }
     }
 
