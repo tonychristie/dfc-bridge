@@ -6,7 +6,6 @@ import com.spirecentral.dfcbridge.dto.CreateObjectRequest;
 import com.spirecentral.dfcbridge.dto.UpdateObjectRequest;
 import com.spirecentral.dfcbridge.exception.DfcBridgeException;
 import com.spirecentral.dfcbridge.exception.ObjectNotFoundException;
-import com.spirecentral.dfcbridge.model.AttributeValue;
 import com.spirecentral.dfcbridge.model.ObjectInfo;
 import com.spirecentral.dfcbridge.model.TypeInfo;
 import com.spirecentral.dfcbridge.service.DfcSessionService;
@@ -551,8 +550,8 @@ public class ObjectServiceImpl implements ObjectService {
         String objectName = getNameForType(sysObject, typeName);
         int permit = getPermitSafe(sysObject);
 
-        // Get all attributes with type metadata
-        Map<String, AttributeValue> attributes = extractAllAttributes(sysObject);
+        // Get all attributes
+        Map<String, Object> attributes = extractAllAttributes(sysObject);
 
         ObjectInfo.ObjectInfoBuilder builder = ObjectInfo.builder()
                 .objectId(objectId)
@@ -606,13 +605,8 @@ public class ObjectServiceImpl implements ObjectService {
         }
     }
 
-    private Map<String, AttributeValue> extractAllAttributes(Object sysObject) throws Exception {
-        Map<String, AttributeValue> attributes = new HashMap<>();
-
-        // Get the type definition to retrieve accurate data types
-        // The object's getAttr().getDataType() can return incorrect values (e.g., double instead of id)
-        // The type definition is the authoritative source for attribute data types
-        Map<String, Integer> typeAttrDataTypes = buildTypeAttrDataTypes(sysObject);
+    private Map<String, Object> extractAllAttributes(Object sysObject) throws Exception {
+        Map<String, Object> attributes = new HashMap<>();
 
         int attrCount = (Integer) invokeReflection(sysObject, "getAttrCount");
 
@@ -620,95 +614,32 @@ public class ObjectServiceImpl implements ObjectService {
             Object attr = invokeReflection(sysObject, "getAttr", new Class<?>[]{int.class}, i);
             String attrName = (String) invokeReflection(attr, "getName");
             boolean isRepeating = (Boolean) invokeReflection(attr, "isRepeating");
-
-            // Use type definition data type if available, otherwise fall back to object's attr
-            int dataType = typeAttrDataTypes.getOrDefault(attrName,
-                    (Integer) invokeReflection(attr, "getDataType"));
-            String typeName = dataTypeToName(dataType);
+            int dataType = (Integer) invokeReflection(attr, "getDataType");
 
             try {
                 Object value;
                 if (isRepeating) {
                     value = extractRepeatingAttributeValue(sysObject, attrName, dataType);
-                    attributes.put(attrName, AttributeValue.repeating(typeName, value));
                 } else {
                     value = extractSingleAttributeValue(sysObject, attrName, dataType);
-                    if (value != null) {
-                        attributes.put(attrName, AttributeValue.single(typeName, value));
-                    }
+                }
+                if (value != null) {
+                    attributes.put(attrName, value);
                 }
             } catch (Exception e) {
-                log.warn("Failed to extract attribute '{}' (type={}): {}",
-                        attrName, typeName, e.getMessage());
+                // Skip attributes that can't be read
             }
         }
 
         return attributes;
     }
 
-    /**
-     * Build a map of attribute name to data type from the object's type definition.
-     * The type definition provides the correct canonical data types for all attributes.
-     */
-    private Map<String, Integer> buildTypeAttrDataTypes(Object sysObject) {
-        Map<String, Integer> dataTypes = new HashMap<>();
-        try {
-            // Get the session from the object
-            Object session = invokeReflection(sysObject, "getSession");
-
-            // Get the object's type name
-            String objectTypeName = (String) invokeReflection(sysObject, "getTypeName");
-
-            // Get the type definition from the session
-            Object type = invokeReflection(session, "getType", new Class<?>[]{String.class}, objectTypeName);
-            if (type == null) {
-                log.debug("Could not get type definition for {}", objectTypeName);
-                return dataTypes;
-            }
-
-            // Iterate through the type's attributes and build the data type map
-            int typeAttrCount = (Integer) invokeReflection(type, "getTypeAttrCount");
-            for (int i = 0; i < typeAttrCount; i++) {
-                Object typeAttr = invokeReflection(type, "getTypeAttr", new Class<?>[]{int.class}, i);
-                String attrName = (String) invokeReflection(typeAttr, "getName");
-                int dataType = (Integer) invokeReflection(typeAttr, "getDataType");
-                dataTypes.put(attrName, dataType);
-            }
-        } catch (Exception e) {
-            log.warn("Could not build type attribute data types: {}", e.getMessage());
-        }
-        return dataTypes;
-    }
-
-    /**
-     * Convert DFC data type constant to human-readable type name.
-     */
-    private String dataTypeToName(int dataType) {
-        // DFC data type constants (from IDfAttr):
-        // DM_BOOLEAN=0, DM_INTEGER=1, DM_STRING=2, DM_ID=3, DM_TIME=4, DM_DOUBLE=5
-        return switch (dataType) {
-            case 0 -> "boolean";
-            case 1 -> "integer";
-            case 2 -> "string";
-            case 3 -> "id";
-            case 4 -> "time";
-            case 5 -> "double";
-            default -> "unknown";
-        };
-    }
-
     private Object extractSingleAttributeValue(Object sysObject, String attrName, int dataType) throws Exception {
-        // For ID attributes, use getString to get consistent string representation
-        // getId returns IDfId which may lose leading zeros when serialized
-        if (dataType == 3) { // DM_ID type
-            return invokeReflection(sysObject, "getString", new Class<?>[]{String.class}, attrName);
-        }
-
         String methodName = getGetterMethodName(dataType);
         Object value = invokeReflection(sysObject, methodName, new Class<?>[]{String.class}, attrName);
 
-        // Convert IDfTime to string for JSON serialization
-        if (value != null && dataType == 4) { // TIME
+        // Convert IDfTime and IDfId to string for JSON serialization
+        if (value != null && (dataType == 4 || dataType == 5)) { // TIME or ID
             value = value.toString();
         }
 
@@ -722,25 +653,13 @@ public class ObjectServiceImpl implements ObjectService {
         }
 
         List<Object> values = new ArrayList<>();
-
-        // For ID attributes, use getRepeatingString to get consistent string representation
-        // getRepeatingId returns IDfId which may lose leading zeros when serialized
-        if (dataType == 3) { // DM_ID type
-            for (int i = 0; i < count; i++) {
-                Object value = invokeReflection(sysObject, "getRepeatingString",
-                        new Class<?>[]{String.class, int.class}, attrName, i);
-                values.add(value);
-            }
-            return values;
-        }
-
         String methodName = getRepeatingGetterMethodName(dataType);
 
         for (int i = 0; i < count; i++) {
             Object value = invokeReflection(sysObject, methodName,
                     new Class<?>[]{String.class, int.class}, attrName, i);
-            // Convert IDfTime to string for JSON serialization
-            if (value != null && dataType == 4) { // TIME
+            // Convert IDfTime and IDfId to string for JSON serialization
+            if (value != null && (dataType == 4 || dataType == 5)) { // TIME or ID
                 value = value.toString();
             }
             values.add(value);
@@ -749,27 +668,25 @@ public class ObjectServiceImpl implements ObjectService {
     }
 
     private String getGetterMethodName(int dataType) {
-        // DFC data type constants: DM_BOOLEAN=0, DM_INTEGER=1, DM_STRING=2, DM_ID=3, DM_TIME=4, DM_DOUBLE=5
         return switch (dataType) {
             case 0 -> "getBoolean";   // DM_BOOLEAN
             case 1 -> "getInt";       // DM_INTEGER
             case 2 -> "getString";    // DM_STRING
-            case 3 -> "getId";        // DM_ID
+            case 3 -> "getDouble";    // DM_DOUBLE
             case 4 -> "getTime";      // DM_TIME
-            case 5 -> "getDouble";    // DM_DOUBLE
+            case 5 -> "getId";        // DM_ID
             default -> "getString";
         };
     }
 
     private String getRepeatingGetterMethodName(int dataType) {
-        // DFC data type constants: DM_BOOLEAN=0, DM_INTEGER=1, DM_STRING=2, DM_ID=3, DM_TIME=4, DM_DOUBLE=5
         return switch (dataType) {
             case 0 -> "getRepeatingBoolean";   // DM_BOOLEAN
             case 1 -> "getRepeatingInt";       // DM_INTEGER
             case 2 -> "getRepeatingString";    // DM_STRING
-            case 3 -> "getRepeatingId";        // DM_ID
+            case 3 -> "getRepeatingDouble";    // DM_DOUBLE
             case 4 -> "getRepeatingTime";      // DM_TIME
-            case 5 -> "getRepeatingDouble";    // DM_DOUBLE
+            case 5 -> "getRepeatingId";        // DM_ID
             default -> "getRepeatingString";
         };
     }
