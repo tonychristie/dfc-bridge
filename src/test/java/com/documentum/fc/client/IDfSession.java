@@ -1,14 +1,24 @@
 package com.documentum.fc.client;
 
+import com.documentum.fc.common.IDfId;
+
 /**
  * Test stub interface that mirrors the DFC IDfSession interface.
- * This is used for unit testing DmApiServiceImpl which uses reflection
- * to look up methods on the IDfSession interface.
+ * This is used for unit testing DmApiServiceImpl and ObjectServiceImpl
+ * which use reflection to look up methods on the IDfSession interface.
  *
- * Only the methods needed for dmAPI testing are defined here.
+ * Only the methods needed for testing are defined here.
  * Signatures match the actual DFC interface.
  */
 public interface IDfSession {
+
+    /**
+     * Get an object by its ID.
+     *
+     * @param objectId the object ID
+     * @return the persistent object, or null if not found
+     */
+    Object getObject(IDfId objectId);
 
     /**
      * Execute a dmAPI get command.
