@@ -1,6 +1,5 @@
 package com.spirecentral.dfcbridge.service.impl;
 
-import com.spirecentral.dfcbridge.model.AttributeValue;
 import com.spirecentral.dfcbridge.model.ObjectInfo;
 import com.spirecentral.dfcbridge.service.DfcSessionService;
 import org.junit.jupiter.api.BeforeEach;
@@ -212,14 +211,12 @@ class ObjectServiceImplTest {
         assertNotNull(result);
         assertNotNull(result.getAttributes());
 
-        AttributeValue versionLabelsAttr = result.getAttributes().get("r_version_label");
-        assertNotNull(versionLabelsAttr);
-        assertEquals("string", versionLabelsAttr.getType());
-        assertTrue(versionLabelsAttr.isRepeating());
-        assertInstanceOf(List.class, versionLabelsAttr.getValue());
+        Object versionLabels = result.getAttributes().get("r_version_label");
+        assertNotNull(versionLabels);
+        assertInstanceOf(List.class, versionLabels);
 
         @SuppressWarnings("unchecked")
-        List<Object> labels = (List<Object>) versionLabelsAttr.getValue();
+        List<Object> labels = (List<Object>) versionLabels;
         assertEquals(2, labels.size());
         assertEquals("1.0", labels.get(0));
         assertEquals("CURRENT", labels.get(1));
@@ -245,19 +242,17 @@ class ObjectServiceImplTest {
 
         // Assert
         assertNotNull(result);
-        AttributeValue keywordsAttr = result.getAttributes().get("keywords");
-        assertNotNull(keywordsAttr);
-        assertEquals("string", keywordsAttr.getType());
-        assertTrue(keywordsAttr.isRepeating());
-        assertInstanceOf(List.class, keywordsAttr.getValue());
+        Object keywords = result.getAttributes().get("keywords");
+        assertNotNull(keywords);
+        assertInstanceOf(List.class, keywords);
 
         @SuppressWarnings("unchecked")
-        List<Object> keywordList = (List<Object>) keywordsAttr.getValue();
+        List<Object> keywordList = (List<Object>) keywords;
         assertTrue(keywordList.isEmpty());
     }
 
     @Test
-    void getObject_withSingleValueAttribute_returnsScalarWithType() {
+    void getObject_withSingleValueAttribute_returnsScalar() {
         // Arrange
         MockDfSession mockSession = new MockDfSession();
         MockDfObjectWithAttributes mockObject = new MockDfObjectWithAttributes();
@@ -277,28 +272,11 @@ class ObjectServiceImplTest {
 
         // Assert
         assertNotNull(result);
-        Map<String, AttributeValue> attrs = result.getAttributes();
+        Map<String, Object> attrs = result.getAttributes();
 
-        // Check object_name
-        AttributeValue nameAttr = attrs.get("object_name");
-        assertNotNull(nameAttr);
-        assertEquals("string", nameAttr.getType());
-        assertFalse(nameAttr.isRepeating());
-        assertEquals("test.pdf", nameAttr.getValue());
-
-        // Check r_content_size
-        AttributeValue sizeAttr = attrs.get("r_content_size");
-        assertNotNull(sizeAttr);
-        assertEquals("integer", sizeAttr.getType());
-        assertFalse(sizeAttr.isRepeating());
-        assertEquals(12345, sizeAttr.getValue());
-
-        // Check a_is_hidden
-        AttributeValue hiddenAttr = attrs.get("a_is_hidden");
-        assertNotNull(hiddenAttr);
-        assertEquals("boolean", hiddenAttr.getType());
-        assertFalse(hiddenAttr.isRepeating());
-        assertEquals(false, hiddenAttr.getValue());
+        assertEquals("test.pdf", attrs.get("object_name"));
+        assertEquals(12345, attrs.get("r_content_size"));
+        assertEquals(false, attrs.get("a_is_hidden"));
     }
 
     @Test
@@ -321,14 +299,12 @@ class ObjectServiceImplTest {
 
         // Assert
         assertNotNull(result);
-        AttributeValue positionsAttr = result.getAttributes().get("i_position");
-        assertNotNull(positionsAttr);
-        assertEquals("integer", positionsAttr.getType());
-        assertTrue(positionsAttr.isRepeating());
-        assertInstanceOf(List.class, positionsAttr.getValue());
+        Object positions = result.getAttributes().get("i_position");
+        assertNotNull(positions);
+        assertInstanceOf(List.class, positions);
 
         @SuppressWarnings("unchecked")
-        List<Object> positionList = (List<Object>) positionsAttr.getValue();
+        List<Object> positionList = (List<Object>) positions;
         assertEquals(3, positionList.size());
         assertEquals(0, positionList.get(0));
         assertEquals(1, positionList.get(1));
@@ -358,143 +334,26 @@ class ObjectServiceImplTest {
 
         // Assert
         assertNotNull(result);
-        Map<String, AttributeValue> attrs = result.getAttributes();
+        Map<String, Object> attrs = result.getAttributes();
 
-        // Single values should have type metadata and not be repeating
-        assertEquals("report.pdf", attrs.get("object_name").getValue());
-        assertFalse(attrs.get("object_name").isRepeating());
-        assertEquals("string", attrs.get("object_name").getType());
+        // Single values should be scalars
+        assertEquals("report.pdf", attrs.get("object_name"));
+        assertEquals("Annual Report", attrs.get("title"));
+        assertEquals(98765, attrs.get("r_content_size"));
 
-        assertEquals("Annual Report", attrs.get("title").getValue());
-        assertEquals(98765, attrs.get("r_content_size").getValue());
-        assertEquals("integer", attrs.get("r_content_size").getType());
-
-        // Repeating values should have type metadata and be marked as repeating
-        AttributeValue versionLabelsAttr = attrs.get("r_version_label");
-        assertTrue(versionLabelsAttr.isRepeating());
-        assertEquals("string", versionLabelsAttr.getType());
-
+        // Repeating values should be lists
         @SuppressWarnings("unchecked")
-        List<Object> versionLabels = (List<Object>) versionLabelsAttr.getValue();
+        List<Object> versionLabels = (List<Object>) attrs.get("r_version_label");
         assertEquals(3, versionLabels.size());
         assertEquals("1.0", versionLabels.get(0));
         assertEquals("1.1", versionLabels.get(1));
         assertEquals("CURRENT", versionLabels.get(2));
 
-        AttributeValue authorsAttr = attrs.get("authors");
-        assertTrue(authorsAttr.isRepeating());
-
         @SuppressWarnings("unchecked")
-        List<Object> authors = (List<Object>) authorsAttr.getValue();
+        List<Object> authors = (List<Object>) attrs.get("authors");
         assertEquals(2, authors.size());
         assertEquals("John Doe", authors.get(0));
         assertEquals("Jane Smith", authors.get(1));
-    }
-
-    // ========== ID Attribute Tests ==========
-
-    @Test
-    void getObject_withSingleIdAttribute_returnsAsString() {
-        // Arrange - tests fix for issue where i_chronicle_id was returned as float
-        MockDfSession mockSession = new MockDfSession();
-        MockDfObjectWithAttributes mockObject = new MockDfObjectWithAttributes();
-        mockObject.setTypeName("dm_document");
-        mockObject.setPermit(7);
-
-        // Add single ID attributes - these should be returned as strings, not numbers
-        mockObject.addAttribute("object_name", 2, false, "test.pdf");
-        mockObject.addAttribute("i_chronicle_id", 3, false, "0904719980000203"); // DM_ID = 3
-        mockObject.addAttribute("i_cabinet_id", 3, false, "0c04719980000107"); // DM_ID = 3
-
-        mockSession.setObjectToReturn(mockObject);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
-
-        // Act
-        ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
-
-        // Assert
-        assertNotNull(result);
-        Map<String, AttributeValue> attrs = result.getAttributes();
-
-        // i_chronicle_id should be a string with leading zero preserved
-        AttributeValue chronicleIdAttr = attrs.get("i_chronicle_id");
-        assertNotNull(chronicleIdAttr);
-        assertEquals("id", chronicleIdAttr.getType());
-        assertFalse(chronicleIdAttr.isRepeating());
-        assertEquals("0904719980000203", chronicleIdAttr.getValue());
-
-        // i_cabinet_id should also be a string
-        AttributeValue cabinetIdAttr = attrs.get("i_cabinet_id");
-        assertNotNull(cabinetIdAttr);
-        assertEquals("id", cabinetIdAttr.getType());
-        assertEquals("0c04719980000107", cabinetIdAttr.getValue());
-    }
-
-    @Test
-    void getObject_withRepeatingIdAttribute_returnsAsStringArray() {
-        // Arrange - tests fix for missing i_folder_id repeating attribute
-        MockDfSession mockSession = new MockDfSession();
-        MockDfObjectWithAttributes mockObject = new MockDfObjectWithAttributes();
-        mockObject.setTypeName("dm_document");
-        mockObject.setPermit(7);
-
-        // Add repeating ID attribute - should be returned as array of strings
-        mockObject.addAttribute("object_name", 2, false, "test.pdf");
-        mockObject.addAttribute("i_folder_id", 3, true, "0c04719980000107", "0c04719980000108", "0c04719980000109"); // DM_ID = 3
-
-        mockSession.setObjectToReturn(mockObject);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
-
-        // Act
-        ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
-
-        // Assert
-        assertNotNull(result);
-        Map<String, AttributeValue> attrs = result.getAttributes();
-
-        // i_folder_id should be a repeating ID attribute with string values
-        AttributeValue folderIdAttr = attrs.get("i_folder_id");
-        assertNotNull(folderIdAttr);
-        assertEquals("id", folderIdAttr.getType());
-        assertTrue(folderIdAttr.isRepeating());
-        assertInstanceOf(List.class, folderIdAttr.getValue());
-
-        @SuppressWarnings("unchecked")
-        List<Object> folderIds = (List<Object>) folderIdAttr.getValue();
-        assertEquals(3, folderIds.size());
-        assertEquals("0c04719980000107", folderIds.get(0));
-        assertEquals("0c04719980000108", folderIds.get(1));
-        assertEquals("0c04719980000109", folderIds.get(2));
-    }
-
-    @Test
-    void getObject_withEmptyRepeatingIdAttribute_returnsEmptyArray() {
-        // Arrange
-        MockDfSession mockSession = new MockDfSession();
-        MockDfObjectWithAttributes mockObject = new MockDfObjectWithAttributes();
-        mockObject.setTypeName("dm_document");
-        mockObject.setPermit(7);
-
-        // Add empty repeating ID attribute
-        mockObject.addAttribute("object_name", 2, false, "test.pdf");
-        mockObject.addAttribute("i_folder_id", 3, true); // no values - DM_ID = 3
-
-        mockSession.setObjectToReturn(mockObject);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
-
-        // Act
-        ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
-
-        // Assert
-        assertNotNull(result);
-        AttributeValue folderIdAttr = result.getAttributes().get("i_folder_id");
-        assertNotNull(folderIdAttr);
-        assertEquals("id", folderIdAttr.getType());
-        assertTrue(folderIdAttr.isRepeating());
-
-        @SuppressWarnings("unchecked")
-        List<Object> folderIds = (List<Object>) folderIdAttr.getValue();
-        assertTrue(folderIds.isEmpty());
     }
 
     // ========== Mock DFC Objects ==========
@@ -814,7 +673,7 @@ class ObjectServiceImplTest {
         /**
          * Add an attribute with values.
          * @param name attribute name
-         * @param dataType DFC constants: 0=BOOLEAN, 1=INTEGER, 2=STRING, 3=ID, 4=TIME, 5=DOUBLE
+         * @param dataType 0=BOOLEAN, 1=INTEGER, 2=STRING, 3=DOUBLE, 4=TIME, 5=ID
          * @param repeating whether the attribute is repeating
          * @param values the values (for repeating, can be multiple; for single, just one)
          */
@@ -844,9 +703,7 @@ class ObjectServiceImplTest {
         @Override
         public String getString(String attrName) {
             for (MockAttribute attr : attributes) {
-                // Support both STRING (2) and ID (3) data types
-                // ID attributes use getString to preserve leading zeros
-                if (attr.getName().equals(attrName) && (attr.getDataType() == 2 || attr.getDataType() == 3)) {
+                if (attr.getName().equals(attrName) && attr.getDataType() == 2) {
                     Object[] values = attr.getValues();
                     return values.length > 0 ? (String) values[0] : null;
                 }
@@ -876,7 +733,7 @@ class ObjectServiceImplTest {
 
         public double getDouble(String attrName) {
             for (MockAttribute attr : attributes) {
-                if (attr.getName().equals(attrName) && attr.getDataType() == 5) { // DM_DOUBLE = 5
+                if (attr.getName().equals(attrName) && attr.getDataType() == 3) {
                     Object[] values = attr.getValues();
                     return values.length > 0 ? (Double) values[0] : 0.0;
                 }
@@ -895,9 +752,7 @@ class ObjectServiceImplTest {
 
         public String getRepeatingString(String attrName, int index) {
             for (MockAttribute attr : attributes) {
-                // Support both STRING (2) and ID (3) data types
-                // ID attributes use getRepeatingString to preserve leading zeros
-                if (attr.getName().equals(attrName) && (attr.getDataType() == 2 || attr.getDataType() == 3)) {
+                if (attr.getName().equals(attrName) && attr.getDataType() == 2) {
                     Object[] values = attr.getValues();
                     return index < values.length ? (String) values[index] : null;
                 }

@@ -7,7 +7,6 @@ import com.spirecentral.dfcbridge.dto.DmApiRequest;
 import com.spirecentral.dfcbridge.dto.UpdateObjectRequest;
 import com.spirecentral.dfcbridge.exception.ObjectNotFoundException;
 import com.spirecentral.dfcbridge.exception.SessionNotFoundException;
-import com.spirecentral.dfcbridge.model.AttributeValue;
 import com.spirecentral.dfcbridge.model.ObjectInfo;
 import com.spirecentral.dfcbridge.model.TypeInfo;
 import com.spirecentral.dfcbridge.service.DmApiService;
@@ -48,9 +47,9 @@ class ObjectControllerTest {
 
     @Test
     void testGetObject_Success() throws Exception {
-        Map<String, AttributeValue> attributes = new HashMap<>();
-        attributes.put("object_name", AttributeValue.single("string", "test_document.pdf"));
-        attributes.put("r_content_size", AttributeValue.single("integer", 1024));
+        Map<String, Object> attributes = new HashMap<>();
+        attributes.put("object_name", "test_document.pdf");
+        attributes.put("r_content_size", 1024);
 
         ObjectInfo info = ObjectInfo.builder()
                 .objectId("0900000180000001")

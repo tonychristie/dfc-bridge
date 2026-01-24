@@ -33,11 +33,9 @@ public class ObjectInfo {
     private String name;
 
     /**
-     * All object attributes with type metadata.
-     * Each attribute includes type information (boolean, integer, string, double, time, id)
-     * and whether it is repeating. This enables downstream consumers to handle values correctly.
+     * All object attributes as key-value pairs
      */
-    private Map<String, AttributeValue> attributes;
+    private Map<String, Object> attributes;
 
     /**
      * User's permission level on this object (null for non-sysobject types)
