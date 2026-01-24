@@ -646,5 +646,10 @@ class DmApiServiceImplTest {
             this.lastApiSetValue = value;
             return apiSetResult;
         }
+
+        @Override
+        public Object getObject(com.documentum.fc.common.IDfId objectId) {
+            return null;  // Not used in DmApiServiceImpl tests
+        }
     }
 }

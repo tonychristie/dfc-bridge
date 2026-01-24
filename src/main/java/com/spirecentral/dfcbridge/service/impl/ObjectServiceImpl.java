@@ -547,20 +547,62 @@ public class ObjectServiceImpl implements ObjectService {
 
     private ObjectInfo extractObjectInfo(Object sysObject, String objectId) throws Exception {
         String typeName = (String) invokeReflection(sysObject, "getTypeName");
-        String objectName = (String) invokeReflection(sysObject, "getObjectName");
-        int permit = (Integer) invokeReflection(sysObject, "getPermit");
+        String objectName = getNameForType(sysObject, typeName);
+        int permit = getPermitSafe(sysObject);
 
         // Get all attributes
         Map<String, Object> attributes = extractAllAttributes(sysObject);
 
-        return ObjectInfo.builder()
+        ObjectInfo.ObjectInfoBuilder builder = ObjectInfo.builder()
                 .objectId(objectId)
                 .type(typeName)
                 .name(objectName)
-                .attributes(attributes)
-                .permissionLevel(permit)
-                .permissionLabel(DfcTypeUtils.permitToLabel(permit))
-                .build();
+                .attributes(attributes);
+
+        // Only add permission info if the object supports it (sysobjects)
+        if (permit >= 0) {
+            builder.permissionLevel(permit)
+                   .permissionLabel(DfcTypeUtils.permitToLabel(permit));
+        }
+
+        return builder.build();
+    }
+
+    private int getPermitSafe(Object dfObject) {
+        try {
+            return (Integer) invokeReflection(dfObject, "getPermit");
+        } catch (Exception e) {
+            // Non-sysobject types don't have getPermit
+            return -1;
+        }
+    }
+
+    private String getNameForType(Object dfObject, String typeName) throws Exception {
+        // Check for type-specific name attributes in order of preference
+        // Different Documentum types use different attributes for their "name"
+        String[] nameAttrs = {"object_name", "name", "group_name", "user_name", "relation_name"};
+
+        for (String attr : nameAttrs) {
+            if (hasAttribute(dfObject, attr)) {
+                String value = (String) invokeReflection(dfObject, "getString",
+                        new Class<?>[]{String.class}, attr);
+                if (value != null && !value.isEmpty()) {
+                    return value;
+                }
+            }
+        }
+
+        // Fallback: return null if no name attribute found
+        return null;
+    }
+
+    private boolean hasAttribute(Object dfObject, String attrName) {
+        try {
+            return (Boolean) invokeReflection(dfObject, "hasAttr",
+                    new Class<?>[]{String.class}, attrName);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private Map<String, Object> extractAllAttributes(Object sysObject) throws Exception {
@@ -571,11 +613,18 @@ public class ObjectServiceImpl implements ObjectService {
         for (int i = 0; i < attrCount; i++) {
             Object attr = invokeReflection(sysObject, "getAttr", new Class<?>[]{int.class}, i);
             String attrName = (String) invokeReflection(attr, "getName");
+            boolean isRepeating = (Boolean) invokeReflection(attr, "isRepeating");
+            int dataType = (Integer) invokeReflection(attr, "getDataType");
 
             try {
-                Object value = invokeReflection(sysObject, "getValue", new Class<?>[]{String.class}, attrName);
+                Object value;
+                if (isRepeating) {
+                    value = extractRepeatingAttributeValue(sysObject, attrName, dataType);
+                } else {
+                    value = extractSingleAttributeValue(sysObject, attrName, dataType);
+                }
                 if (value != null) {
-                    attributes.put(attrName, value.toString());
+                    attributes.put(attrName, value);
                 }
             } catch (Exception e) {
                 // Skip attributes that can't be read
@@ -585,7 +634,76 @@ public class ObjectServiceImpl implements ObjectService {
         return attributes;
     }
 
+    private Object extractSingleAttributeValue(Object sysObject, String attrName, int dataType) throws Exception {
+        String methodName = getGetterMethodName(dataType);
+        Object value = invokeReflection(sysObject, methodName, new Class<?>[]{String.class}, attrName);
+
+        // Convert IDfTime and IDfId to string for JSON serialization
+        if (value != null && (dataType == 4 || dataType == 5)) { // TIME or ID
+            value = value.toString();
+        }
+
+        return value;
+    }
+
+    private Object extractRepeatingAttributeValue(Object sysObject, String attrName, int dataType) throws Exception {
+        int count = (Integer) invokeReflection(sysObject, "getValueCount", new Class<?>[]{String.class}, attrName);
+        if (count == 0) {
+            return new ArrayList<>();
+        }
+
+        List<Object> values = new ArrayList<>();
+        String methodName = getRepeatingGetterMethodName(dataType);
+
+        for (int i = 0; i < count; i++) {
+            Object value = invokeReflection(sysObject, methodName,
+                    new Class<?>[]{String.class, int.class}, attrName, i);
+            // Convert IDfTime and IDfId to string for JSON serialization
+            if (value != null && (dataType == 4 || dataType == 5)) { // TIME or ID
+                value = value.toString();
+            }
+            values.add(value);
+        }
+        return values;
+    }
+
+    private String getGetterMethodName(int dataType) {
+        return switch (dataType) {
+            case 0 -> "getBoolean";   // DM_BOOLEAN
+            case 1 -> "getInt";       // DM_INTEGER
+            case 2 -> "getString";    // DM_STRING
+            case 3 -> "getDouble";    // DM_DOUBLE
+            case 4 -> "getTime";      // DM_TIME
+            case 5 -> "getId";        // DM_ID
+            default -> "getString";
+        };
+    }
+
+    private String getRepeatingGetterMethodName(int dataType) {
+        return switch (dataType) {
+            case 0 -> "getRepeatingBoolean";   // DM_BOOLEAN
+            case 1 -> "getRepeatingInt";       // DM_INTEGER
+            case 2 -> "getRepeatingString";    // DM_STRING
+            case 3 -> "getRepeatingDouble";    // DM_DOUBLE
+            case 4 -> "getRepeatingTime";      // DM_TIME
+            case 5 -> "getRepeatingId";        // DM_ID
+            default -> "getRepeatingString";
+        };
+    }
+
     private void setObjectAttribute(Object sysObject, String attrName, Object value) throws Exception {
+        // Check if this is a repeating attribute
+        boolean isRepeating = (Boolean) invokeReflection(sysObject, "isAttrRepeating",
+                new Class<?>[]{String.class}, attrName);
+
+        if (isRepeating) {
+            setRepeatingAttribute(sysObject, attrName, value);
+        } else {
+            setScalarAttribute(sysObject, attrName, value);
+        }
+    }
+
+    private void setScalarAttribute(Object sysObject, String attrName, Object value) throws Exception {
         // Determine the setter method based on value type
         if (value instanceof String) {
             Method setStringMethod = sysObject.getClass().getMethod("setString", String.class, String.class);
@@ -603,6 +721,43 @@ public class ObjectServiceImpl implements ObjectService {
             // Default to string
             Method setStringMethod = sysObject.getClass().getMethod("setString", String.class, String.class);
             setStringMethod.invoke(sysObject, attrName, value.toString());
+        }
+    }
+
+    private void setRepeatingAttribute(Object sysObject, String attrName, Object value) throws Exception {
+        // Clear existing values first
+        Method removeAllMethod = sysObject.getClass().getMethod("removeAll", String.class);
+        removeAllMethod.invoke(sysObject, attrName);
+
+        // Handle list input
+        if (value instanceof List<?> valueList) {
+            for (int i = 0; i < valueList.size(); i++) {
+                Object item = valueList.get(i);
+                setRepeatingValueAtIndex(sysObject, attrName, i, item);
+            }
+        } else {
+            // Scalar value - set as single-element repeating attribute
+            setRepeatingValueAtIndex(sysObject, attrName, 0, value);
+        }
+    }
+
+    private void setRepeatingValueAtIndex(Object sysObject, String attrName, int index, Object value) throws Exception {
+        if (value instanceof String) {
+            Method method = sysObject.getClass().getMethod("setRepeatingString", String.class, int.class, String.class);
+            method.invoke(sysObject, attrName, index, value);
+        } else if (value instanceof Integer) {
+            Method method = sysObject.getClass().getMethod("setRepeatingInt", String.class, int.class, int.class);
+            method.invoke(sysObject, attrName, index, value);
+        } else if (value instanceof Boolean) {
+            Method method = sysObject.getClass().getMethod("setRepeatingBoolean", String.class, int.class, boolean.class);
+            method.invoke(sysObject, attrName, index, value);
+        } else if (value instanceof Double) {
+            Method method = sysObject.getClass().getMethod("setRepeatingDouble", String.class, int.class, double.class);
+            method.invoke(sysObject, attrName, index, value);
+        } else {
+            // Default to string
+            Method method = sysObject.getClass().getMethod("setRepeatingString", String.class, int.class, String.class);
+            method.invoke(sysObject, attrName, index, value.toString());
         }
     }
 
