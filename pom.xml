@@ -13,7 +13,7 @@
 
     <groupId>com.spirecentral</groupId>
     <artifactId>dfc-bridge</artifactId>
-    <version>1.1.0</version>
+    <version>1.2.0</version>
     <name>DFC Bridge</name>
     <description>Java Spring Boot microservice that wraps DFC and exposes a REST API</description>
 
