@@ -11,6 +11,7 @@ import com.spirecentral.dfcbridge.model.ObjectInfo;
 import com.spirecentral.dfcbridge.model.TypeInfo;
 import com.spirecentral.dfcbridge.service.DfcSessionService;
 import com.spirecentral.dfcbridge.service.ObjectService;
+import com.spirecentral.dfcbridge.util.DfcExceptionUtils;
 import com.spirecentral.dfcbridge.util.DfcTypeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -92,7 +93,7 @@ public class ObjectServiceImpl implements ObjectService {
 
         } catch (Exception e) {
             throw new DfcBridgeException("CABINET_ERROR",
-                    "Failed to get cabinets: " + e.getMessage(), e);
+                    "Failed to get cabinets: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
     }
 
@@ -114,7 +115,7 @@ public class ObjectServiceImpl implements ObjectService {
             throw e;
         } catch (Exception e) {
             throw new DfcBridgeException("OBJECT_ERROR",
-                    "Failed to get object: " + e.getMessage(), e);
+                    "Failed to get object: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
     }
 
@@ -147,7 +148,7 @@ public class ObjectServiceImpl implements ObjectService {
             throw e;
         } catch (Exception e) {
             throw new DfcBridgeException("UPDATE_ERROR",
-                    "Failed to update object: " + e.getMessage(), e);
+                    "Failed to update object: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
     }
 
@@ -200,7 +201,7 @@ public class ObjectServiceImpl implements ObjectService {
             throw e;
         } catch (Exception e) {
             throw new DfcBridgeException("FOLDER_ERROR",
-                    "Failed to list folder contents: " + e.getMessage(), e);
+                    "Failed to list folder contents: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
     }
 
@@ -225,7 +226,7 @@ public class ObjectServiceImpl implements ObjectService {
             throw e;
         } catch (Exception e) {
             throw new DfcBridgeException("TYPE_ERROR",
-                    "Failed to get type info: " + e.getMessage(), e);
+                    "Failed to get type info: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
     }
 
@@ -282,7 +283,7 @@ public class ObjectServiceImpl implements ObjectService {
 
         } catch (Exception e) {
             throw new DfcBridgeException("TYPE_LIST_ERROR",
-                    "Failed to list types: " + e.getMessage(), e);
+                    "Failed to list types: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
     }
 
@@ -324,7 +325,7 @@ public class ObjectServiceImpl implements ObjectService {
             throw e;
         } catch (Exception e) {
             throw new DfcBridgeException("API_ERROR",
-                    "Failed to execute API: " + e.getMessage(), e);
+                    "Failed to execute API: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
     }
 
@@ -373,7 +374,7 @@ public class ObjectServiceImpl implements ObjectService {
             throw e;
         } catch (Exception e) {
             throw new DfcBridgeException("FOLDER_ERROR",
-                    "Failed to list folder contents: " + e.getMessage(), e);
+                    "Failed to list folder contents: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
     }
 
@@ -399,7 +400,7 @@ public class ObjectServiceImpl implements ObjectService {
             throw e;
         } catch (Exception e) {
             throw new DfcBridgeException("CHECKOUT_ERROR",
-                    "Failed to checkout object: " + e.getMessage(), e);
+                    "Failed to checkout object: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
     }
 
@@ -423,7 +424,7 @@ public class ObjectServiceImpl implements ObjectService {
             throw e;
         } catch (Exception e) {
             throw new DfcBridgeException("CANCEL_CHECKOUT_ERROR",
-                    "Failed to cancel checkout: " + e.getMessage(), e);
+                    "Failed to cancel checkout: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
     }
 
@@ -452,7 +453,7 @@ public class ObjectServiceImpl implements ObjectService {
             throw e;
         } catch (Exception e) {
             throw new DfcBridgeException("CHECKIN_ERROR",
-                    "Failed to checkin object: " + e.getMessage(), e);
+                    "Failed to checkin object: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
     }
 
@@ -501,7 +502,7 @@ public class ObjectServiceImpl implements ObjectService {
 
         } catch (Exception e) {
             throw new DfcBridgeException("CREATE_ERROR",
-                    "Failed to create object: " + e.getMessage(), e);
+                    "Failed to create object: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
     }
 
@@ -531,7 +532,7 @@ public class ObjectServiceImpl implements ObjectService {
             throw e;
         } catch (Exception e) {
             throw new DfcBridgeException("DELETE_ERROR",
-                    "Failed to delete object: " + e.getMessage(), e);
+                    "Failed to delete object: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
     }
 

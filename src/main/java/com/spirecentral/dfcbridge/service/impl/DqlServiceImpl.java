@@ -5,6 +5,7 @@ import com.spirecentral.dfcbridge.exception.DqlException;
 import com.spirecentral.dfcbridge.model.QueryResult;
 import com.spirecentral.dfcbridge.service.DfcSessionService;
 import com.spirecentral.dfcbridge.service.DqlService;
+import com.spirecentral.dfcbridge.util.DfcExceptionUtils;
 import com.spirecentral.dfcbridge.util.DfcTypeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -121,7 +122,7 @@ public class DqlServiceImpl implements DqlService {
                     .build();
 
         } catch (Exception e) {
-            throw new DqlException("DQL execution failed: " + e.getMessage(), e);
+            throw new DqlException("DQL execution failed: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
     }
 
@@ -157,7 +158,7 @@ public class DqlServiceImpl implements DqlService {
             return 1;
 
         } catch (Exception e) {
-            throw new DqlException("DQL update failed: " + e.getMessage(), e);
+            throw new DqlException("DQL update failed: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
     }
 

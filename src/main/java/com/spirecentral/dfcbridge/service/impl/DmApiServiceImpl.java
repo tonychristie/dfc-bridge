@@ -5,6 +5,7 @@ import com.spirecentral.dfcbridge.dto.DmApiRequest;
 import com.spirecentral.dfcbridge.exception.DfcBridgeException;
 import com.spirecentral.dfcbridge.service.DfcSessionService;
 import com.spirecentral.dfcbridge.service.DmApiService;
+import com.spirecentral.dfcbridge.util.DfcExceptionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -114,7 +115,7 @@ public class DmApiServiceImpl implements DmApiService {
                 log.error("Caused by: {} - {}", e.getCause().getClass().getName(), e.getCause().getMessage());
             }
             throw new DfcBridgeException("DMAPI_ERROR",
-                    "Failed to execute dmAPI: " + e.getMessage(), e);
+                    "Failed to execute dmAPI: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
     }
 

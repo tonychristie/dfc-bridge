@@ -7,6 +7,7 @@ import com.spirecentral.dfcbridge.model.GroupInfo;
 import com.spirecentral.dfcbridge.model.UserInfo;
 import com.spirecentral.dfcbridge.service.DfcSessionService;
 import com.spirecentral.dfcbridge.service.UserGroupService;
+import com.spirecentral.dfcbridge.util.DfcExceptionUtils;
 import com.spirecentral.dfcbridge.util.DfcTypeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,7 +87,7 @@ public class UserGroupServiceImpl implements UserGroupService {
 
         } catch (Exception e) {
             throw new DfcBridgeException("USER_LIST_ERROR",
-                    "Failed to list users: " + e.getMessage(), e);
+                    "Failed to list users: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
     }
 
@@ -132,7 +133,7 @@ public class UserGroupServiceImpl implements UserGroupService {
             throw e;
         } catch (Exception e) {
             throw new DfcBridgeException("USER_ERROR",
-                    "Failed to get user: " + e.getMessage(), e);
+                    "Failed to get user: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
     }
 
@@ -192,7 +193,7 @@ public class UserGroupServiceImpl implements UserGroupService {
 
         } catch (Exception e) {
             throw new DfcBridgeException("GROUP_LIST_ERROR",
-                    "Failed to list groups: " + e.getMessage(), e);
+                    "Failed to list groups: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
     }
 
@@ -265,7 +266,7 @@ public class UserGroupServiceImpl implements UserGroupService {
             throw e;
         } catch (Exception e) {
             throw new DfcBridgeException("GROUP_ERROR",
-                    "Failed to get group: " + e.getMessage(), e);
+                    "Failed to get group: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
     }
 
@@ -314,7 +315,7 @@ public class UserGroupServiceImpl implements UserGroupService {
 
         } catch (Exception e) {
             throw new DfcBridgeException("USER_GROUPS_ERROR",
-                    "Failed to get groups for user: " + e.getMessage(), e);
+                    "Failed to get groups for user: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
     }
 
