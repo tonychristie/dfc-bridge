@@ -169,11 +169,31 @@ if [[ "$MODE" != "dfc" && "$MODE" != "nodfc" ]]; then
     exit 1
 fi
 
-# Check extracted directory exists
-if [ ! -d "$EXTRACTED_DIR" ]; then
-    echo "Error: Extracted JAR directory not found at $EXTRACTED_DIR"
-    echo "Run: mvn package && cd target && unzip dfc-bridge-*.jar -d extracted"
+# Find the newest built JAR
+JAR=""
+for candidate in "$SCRIPT_DIR"/target/dfc-bridge-*.jar; do
+    [ -e "$candidate" ] || continue
+    if [ -z "$JAR" ] || [ "$candidate" -nt "$JAR" ]; then
+        JAR="$candidate"
+    fi
+done
+
+if [ -z "$JAR" ]; then
+    echo "Error: No dfc-bridge-*.jar found in $SCRIPT_DIR/target"
+    echo "Run: mvn package"
     exit 1
+fi
+
+# Extract the JAR when it is newer than the last extraction.
+# Extracted file timestamps come from the JAR and the running bridge writes
+# into the directory, so a marker file records when the extraction happened.
+# logs/ and the DFC data directory are left in place.
+EXTRACT_MARKER="$EXTRACTED_DIR/.extracted"
+if [ ! -f "$EXTRACT_MARKER" ] || [ "$JAR" -nt "$EXTRACT_MARKER" ]; then
+    echo "Extracting $(basename "$JAR")..."
+    rm -rf "$EXTRACTED_DIR/BOOT-INF" "$EXTRACTED_DIR/META-INF" "$EXTRACTED_DIR/org"
+    unzip -q -o "$JAR" -d "$EXTRACTED_DIR"
+    touch "$EXTRACT_MARKER"
 fi
 
 cd "$EXTRACTED_DIR"

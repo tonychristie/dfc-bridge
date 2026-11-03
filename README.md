@@ -57,11 +57,12 @@ mvn clean package
 
 The `start-dfc-bridge.sh` script provides an easy way to run DFC Bridge with or without DFC libraries.
 
-**First, extract the JAR:**
+**First, build the JAR:**
 ```bash
 mvn package
-unzip target/dfc-bridge-*.jar -d target/extracted
 ```
+
+On start, the script extracts the JAR into `target/extracted` when the JAR has changed since the last start.
 
 **Run with DFC (production mode):**
 ```bash
