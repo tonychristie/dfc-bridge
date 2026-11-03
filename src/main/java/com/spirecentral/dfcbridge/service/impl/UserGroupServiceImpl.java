@@ -146,7 +146,7 @@ public class UserGroupServiceImpl implements UserGroupService {
         try {
             // First query: get basic group info (single-value attributes)
             String dql = "SELECT r_object_id, group_name, description, group_class, " +
-                    "group_admin, is_private " +
+                    "group_admin, is_private, is_dynamic, owner_name, group_address, group_source " +
                     "FROM dm_group";
 
             if (pattern != null && !pattern.isEmpty()) {
@@ -176,6 +176,10 @@ public class UserGroupServiceImpl implements UserGroupService {
                             .groupClass((String) getStringMethod.invoke(collection, "group_class"))
                             .groupAdmin((String) getStringMethod.invoke(collection, "group_admin"))
                             .isPrivate((Boolean) getBooleanMethod.invoke(collection, "is_private"))
+                            .isDynamic((Boolean) getBooleanMethod.invoke(collection, "is_dynamic"))
+                            .ownerName((String) getStringMethod.invoke(collection, "owner_name"))
+                            .groupAddress((String) getStringMethod.invoke(collection, "group_address"))
+                            .groupSource((String) getStringMethod.invoke(collection, "group_source"))
                             .usersNames(new ArrayList<>())
                             .groupsNames(new ArrayList<>()));
                 }
@@ -208,7 +212,8 @@ public class UserGroupServiceImpl implements UserGroupService {
 
             // Single query for all attributes including repeating ones
             String dql = "SELECT r_object_id, group_name, description, group_class, " +
-                    "group_admin, is_private, users_names, groups_names " +
+                    "group_admin, is_private, is_dynamic, owner_name, group_address, group_source, " +
+                    "users_names, groups_names " +
                     "FROM dm_group WHERE group_name = '" + sanitizedGroupName + "'";
 
             Object collection = executeQuery(dfSession, dql);
@@ -232,7 +237,11 @@ public class UserGroupServiceImpl implements UserGroupService {
                         .description((String) getStringMethod.invoke(collection, "description"))
                         .groupClass((String) getStringMethod.invoke(collection, "group_class"))
                         .groupAdmin((String) getStringMethod.invoke(collection, "group_admin"))
-                        .isPrivate((Boolean) getBooleanMethod.invoke(collection, "is_private"));
+                        .isPrivate((Boolean) getBooleanMethod.invoke(collection, "is_private"))
+                        .isDynamic((Boolean) getBooleanMethod.invoke(collection, "is_dynamic"))
+                        .ownerName((String) getStringMethod.invoke(collection, "owner_name"))
+                        .groupAddress((String) getStringMethod.invoke(collection, "group_address"))
+                        .groupSource((String) getStringMethod.invoke(collection, "group_source"));
 
                 // Extract users_names repeating attribute
                 List<String> usersNames = new ArrayList<>();
@@ -282,7 +291,7 @@ public class UserGroupServiceImpl implements UserGroupService {
             // Query for groups containing this user
             // This finds groups where the user is a direct member
             String dql = "SELECT r_object_id, group_name, description, group_class, " +
-                    "group_admin, is_private " +
+                    "group_admin, is_private, is_dynamic, owner_name, group_address, group_source " +
                     "FROM dm_group WHERE ANY users_names = '" + sanitizedUserName + "' " +
                     "ORDER BY group_name";
 
@@ -303,6 +312,10 @@ public class UserGroupServiceImpl implements UserGroupService {
                             .groupClass((String) getStringMethod.invoke(collection, "group_class"))
                             .groupAdmin((String) getStringMethod.invoke(collection, "group_admin"))
                             .isPrivate((Boolean) getBooleanMethod.invoke(collection, "is_private"))
+                            .isDynamic((Boolean) getBooleanMethod.invoke(collection, "is_dynamic"))
+                            .ownerName((String) getStringMethod.invoke(collection, "owner_name"))
+                            .groupAddress((String) getStringMethod.invoke(collection, "group_address"))
+                            .groupSource((String) getStringMethod.invoke(collection, "group_source"))
                             .usersNames(new ArrayList<>())
                             .groupsNames(new ArrayList<>())
                             .build());
