@@ -11,6 +11,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.lang.reflect.InvocationTargetException;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -518,6 +520,25 @@ class DmApiServiceImplTest {
     }
 
     @Test
+    void execute_reportsMessageOfExceptionThrownByDfc() {
+        MockDfSession mockSession = new MockDfSession();
+        mockSession.setApiGetException(new RuntimeException("DM_API_E_NOATTR"));
+        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+
+        DmApiRequest request = DmApiRequest.builder()
+                .sessionId("test-session")
+                .apiType("get")
+                .command("get,session,0900000180000001,no_such_attr")
+                .build();
+
+        DfcBridgeException exception = assertThrows(DfcBridgeException.class,
+                () -> dmApiService.execute(request));
+
+        assertTrue(exception.getMessage().contains("DM_API_E_NOATTR"));
+        assertInstanceOf(InvocationTargetException.class, exception.getCause());
+    }
+
+    @Test
     void execute_tracksExecutionTime() {
         // Arrange
         MockDfSession mockSession = new MockDfSession();
@@ -551,6 +572,7 @@ class DmApiServiceImplTest {
      */
     public static class MockDfSession implements IDfSession {
         private String apiGetResult;
+        private RuntimeException apiGetException;
         private boolean apiExecResult;
         private boolean apiSetResult;
 
@@ -569,6 +591,10 @@ class DmApiServiceImplTest {
         // Setters for test configuration
         public void setApiGetResult(String result) {
             this.apiGetResult = result;
+        }
+
+        public void setApiGetException(RuntimeException exception) {
+            this.apiGetException = exception;
         }
 
         public void setApiExecResult(boolean result) {
@@ -627,6 +653,9 @@ class DmApiServiceImplTest {
             this.apiGetCalled = true;
             this.lastApiGetMethod = method;
             this.lastApiGetArgs = args;
+            if (apiGetException != null) {
+                throw apiGetException;
+            }
             return apiGetResult;
         }
 

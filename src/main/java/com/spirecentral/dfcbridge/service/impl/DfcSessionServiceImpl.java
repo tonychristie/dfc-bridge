@@ -8,6 +8,7 @@ import com.spirecentral.dfcbridge.model.RepositoryInfo;
 import com.spirecentral.dfcbridge.model.SessionInfo;
 import com.spirecentral.dfcbridge.service.DfcAvailabilityService;
 import com.spirecentral.dfcbridge.service.DfcSessionService;
+import com.spirecentral.dfcbridge.util.DfcExceptionUtils;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -132,7 +133,7 @@ public class DfcSessionServiceImpl implements DfcSessionService {
             throw new ConnectionException("DFC libraries not found on classpath. " +
                     "Ensure DFC is properly installed and configured.", e);
         } catch (Exception e) {
-            throw new ConnectionException("Failed to connect: " + e.getMessage(), e);
+            throw new ConnectionException("Failed to connect: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
     }
 
