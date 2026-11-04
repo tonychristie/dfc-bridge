@@ -114,7 +114,6 @@ public class DfcSessionServiceImpl implements DfcSessionService {
                     .user(request.getUsername())
                     .docbroker(request.getDocbroker())
                     .port(request.getPort())
-                    .dfcProfile(request.getDfcProfile())
                     .sessionStart(Instant.now())
                     .lastActivity(Instant.now())
                     .serverVersion(repoInfo.getServerVersion())
@@ -188,24 +187,8 @@ public class DfcSessionServiceImpl implements DfcSessionService {
             throw new SessionNotFoundException(sessionId);
         }
 
-        Object dfSession = holder.dfSession;
-        log.debug("getDfcSession: Found session object - class={}, sessionId={}",
-                dfSession.getClass().getName(), sessionId);
-        log.debug("getDfcSession: Session object superclass={}",
-                dfSession.getClass().getSuperclass() != null ?
-                        dfSession.getClass().getSuperclass().getName() : "none");
-
-        // Log implemented interfaces for diagnostic purposes
-        Class<?>[] interfaces = dfSession.getClass().getInterfaces();
-        if (log.isDebugEnabled()) {
-            log.debug("getDfcSession: Session object implements {} interfaces:", interfaces.length);
-            for (Class<?> iface : interfaces) {
-                log.debug("  - {}", iface.getName());
-            }
-        }
-
         touchSession(sessionId);
-        return dfSession;
+        return holder.dfSession;
     }
 
     /**

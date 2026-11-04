@@ -131,8 +131,6 @@ server:
 dfc:
   session:
     timeout-minutes: 30      # Session timeout
-    auto-reconnect: true     # Auto-reconnect on session loss
-    max-sessions-per-profile: 10
 ```
 
 ### Port Configuration

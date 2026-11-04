@@ -13,10 +13,6 @@ dfc:
   session:
     # Default session timeout in minutes
     timeout-minutes: 30
-    # Enable automatic reconnection on session loss
-    auto-reconnect: true
-    # Maximum concurrent sessions per profile
-    max-sessions-per-profile: 10
 
 # Actuator endpoints
 management:

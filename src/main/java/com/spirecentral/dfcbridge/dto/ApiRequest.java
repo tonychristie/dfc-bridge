@@ -9,7 +9,6 @@ import lombok.NoArgsConstructor;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * Request body for executing an arbitrary DFC API method.
@@ -37,7 +36,4 @@ public class ApiRequest {
 
     @Schema(description = "Method arguments as a list")
     private List<Object> args;
-
-    @Schema(description = "Named method arguments as key-value pairs")
-    private Map<String, Object> namedArgs;
 }

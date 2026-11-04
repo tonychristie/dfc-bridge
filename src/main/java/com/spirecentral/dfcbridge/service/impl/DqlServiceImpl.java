@@ -126,42 +126,6 @@ public class DqlServiceImpl implements DqlService {
         }
     }
 
-    @Override
-    public int executeUpdate(String sessionId, String dql) {
-        log.debug("Executing DQL update: {}", dql);
-
-        Object dfSession = sessionService.getDfcSession(sessionId);
-
-        try {
-            // Create query object
-            Class<?> dfQueryClass = Class.forName(DFC_QUERY_CLASS);
-            Object query = dfQueryClass.getDeclaredConstructor().newInstance();
-
-            // Set DQL
-            Method setDqlMethod = dfQueryClass.getMethod("setDQL", String.class);
-            setDqlMethod.invoke(query, dql);
-
-            // Execute as update query
-            // IDfQuery.DF_EXEC_QUERY = 3
-            Class<?> queryInterface = Class.forName(DFC_QUERY_IFACE);
-            Method executeMethod = queryInterface.getMethod("execute",
-                    Class.forName("com.documentum.fc.client.IDfSession"), int.class);
-            Object collection = executeMethod.invoke(query, dfSession, 3);
-
-            // Close collection
-            Class<?> collectionClass = Class.forName(DFC_COLLECTION_IFACE);
-            Method closeMethod = collectionClass.getMethod("close");
-            closeMethod.invoke(collection);
-
-            // DFC doesn't easily return affected row count for updates
-            // Return 1 to indicate success
-            return 1;
-
-        } catch (Exception e) {
-            throw new DqlException("DQL update failed: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
-        }
-    }
-
     private List<QueryResult.ColumnInfo> extractColumns(Object collection) throws Exception {
         List<QueryResult.ColumnInfo> columns = new ArrayList<>();
 

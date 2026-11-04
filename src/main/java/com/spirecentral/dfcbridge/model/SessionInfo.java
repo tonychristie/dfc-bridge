@@ -47,11 +47,6 @@ public class SessionInfo {
     private int port;
 
     /**
-     * DFC profile used for this session
-     */
-    private String dfcProfile;
-
-    /**
      * When the session was started
      */
     private Instant sessionStart;
