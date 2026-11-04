@@ -39,9 +39,6 @@ public class ConnectRequest {
     @Schema(description = "Password for authentication")
     private String password;
 
-    @Schema(description = "DFC profile to use (optional)", example = "default")
-    private String dfcProfile;
-
     @Schema(description = "Domain for authentication (optional)")
     private String domain;
 }

@@ -19,7 +19,6 @@ class SessionInfoTest {
                 .user("dmadmin")
                 .docbroker("docbroker.example.com")
                 .port(1489)
-                .dfcProfile("default")
                 .sessionStart(now)
                 .lastActivity(now)
                 .serverVersion("23.2.0")
@@ -31,7 +30,6 @@ class SessionInfoTest {
         assertEquals("dmadmin", session.getUser());
         assertEquals("docbroker.example.com", session.getDocbroker());
         assertEquals(1489, session.getPort());
-        assertEquals("default", session.getDfcProfile());
         assertEquals(now, session.getSessionStart());
         assertEquals(now, session.getLastActivity());
         assertEquals("23.2.0", session.getServerVersion());

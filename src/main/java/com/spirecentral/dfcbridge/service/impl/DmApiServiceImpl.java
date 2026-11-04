@@ -11,10 +11,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.lang.reflect.Method;
-import java.util.Arrays;
 import java.util.Set;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 /**
  * DFC implementation of DmApiService using reflection to call DFC session API methods.
@@ -64,9 +62,6 @@ public class DmApiServiceImpl implements DmApiService {
         long startTime = System.currentTimeMillis();
         Object dfSession = sessionService.getDfcSession(request.getSessionId());
 
-        // Log session object details for debugging
-        logSessionDetails(dfSession);
-
         try {
             Object result;
             String resultType;
@@ -105,70 +100,10 @@ public class DmApiServiceImpl implements DmApiService {
                     .build();
 
         } catch (DfcBridgeException e) {
-            log.error("dmAPI DfcBridgeException: code={}, message={}",
-                    e.getCode(), e.getMessage());
             throw e;
         } catch (Exception e) {
-            log.error("dmAPI execution failed", e);
-            log.error("Exception type: {}, message: {}", e.getClass().getName(), e.getMessage());
-            if (e.getCause() != null) {
-                log.error("Caused by: {} - {}", e.getCause().getClass().getName(), e.getCause().getMessage());
-            }
             throw new DfcBridgeException("DMAPI_ERROR",
                     "Failed to execute dmAPI: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
-        }
-    }
-
-    /**
-     * Log detailed session object information for debugging.
-     * Uses reflection to understand what type of object we have and what methods are available.
-     */
-    private void logSessionDetails(Object dfSession) {
-        if (!log.isTraceEnabled()) {
-            return;
-        }
-
-        log.trace("Session object class: {}", dfSession.getClass().getName());
-        log.trace("Session object superclass: {}",
-                dfSession.getClass().getSuperclass() != null ?
-                        dfSession.getClass().getSuperclass().getName() : "none");
-
-        // Log implemented interfaces
-        Class<?>[] interfaces = dfSession.getClass().getInterfaces();
-        log.trace("Session object implements {} interfaces:", interfaces.length);
-        for (Class<?> iface : interfaces) {
-            log.trace("  - {}", iface.getName());
-        }
-
-        // Log available api* methods on the session object's class
-        log.trace("Looking for api* methods on session object class...");
-        Method[] methods = dfSession.getClass().getMethods();
-        for (Method method : methods) {
-            if (method.getName().startsWith("api")) {
-                String params = Arrays.stream(method.getParameterTypes())
-                        .map(Class::getSimpleName)
-                        .collect(Collectors.joining(", "));
-                log.trace("  Found: {}({}) -> {}",
-                        method.getName(), params, method.getReturnType().getSimpleName());
-            }
-        }
-
-        // Also check the IDfSession interface itself
-        try {
-            Class<?> sessionInterface = Class.forName(DFC_SESSION_IFACE);
-            log.trace("Looking for api* methods on IDfSession interface...");
-            Method[] ifaceMethods = sessionInterface.getMethods();
-            for (Method method : ifaceMethods) {
-                if (method.getName().startsWith("api")) {
-                    String params = Arrays.stream(method.getParameterTypes())
-                            .map(Class::getSimpleName)
-                            .collect(Collectors.joining(", "));
-                    log.trace("  IDfSession.{}({}) -> {}",
-                            method.getName(), params, method.getReturnType().getSimpleName());
-                }
-            }
-        } catch (ClassNotFoundException e) {
-            log.trace("Could not load IDfSession interface: {}", e.getMessage());
         }
     }
 
@@ -189,29 +124,13 @@ public class DmApiServiceImpl implements DmApiService {
         Class<?> sessionInterface = Class.forName(DFC_SESSION_IFACE);
         log.debug("Looking up apiGet on interface: {}", sessionInterface.getName());
 
-        try {
-            Method apiGetMethod = sessionInterface.getMethod("apiGet", String.class, String.class);
-            log.debug("Found apiGet method: {} (declared in {})",
-                    apiGetMethod, apiGetMethod.getDeclaringClass().getName());
+        Method apiGetMethod = sessionInterface.getMethod("apiGet", String.class, String.class);
+        log.debug("Found apiGet method: {} (declared in {})",
+                apiGetMethod, apiGetMethod.getDeclaringClass().getName());
 
-            String result = (String) apiGetMethod.invoke(dfSession, method, args);
-            log.debug("apiGet returned: '{}'", result);
-            return result;
-        } catch (NoSuchMethodException e) {
-            log.error("NoSuchMethodException looking for apiGet(String, String) on {}",
-                    sessionInterface.getName());
-            log.error("Available methods on interface:");
-            for (Method m : sessionInterface.getMethods()) {
-                log.error("  - {}", m);
-            }
-            throw e;
-        } catch (Exception e) {
-            log.error("Error invoking apiGet: {} - {}", e.getClass().getName(), e.getMessage());
-            if (e.getCause() != null) {
-                log.error("Caused by: {} - {}", e.getCause().getClass().getName(), e.getCause().getMessage());
-            }
-            throw e;
-        }
+        String result = (String) apiGetMethod.invoke(dfSession, method, args);
+        log.debug("apiGet returned: '{}'", result);
+        return result;
     }
 
     /**
@@ -231,25 +150,13 @@ public class DmApiServiceImpl implements DmApiService {
         Class<?> sessionInterface = Class.forName(DFC_SESSION_IFACE);
         log.debug("Looking up apiExec on interface: {}", sessionInterface.getName());
 
-        try {
-            Method apiExecMethod = sessionInterface.getMethod("apiExec", String.class, String.class);
-            log.debug("Found apiExec method: {} (declared in {})",
-                    apiExecMethod, apiExecMethod.getDeclaringClass().getName());
+        Method apiExecMethod = sessionInterface.getMethod("apiExec", String.class, String.class);
+        log.debug("Found apiExec method: {} (declared in {})",
+                apiExecMethod, apiExecMethod.getDeclaringClass().getName());
 
-            boolean result = (Boolean) apiExecMethod.invoke(dfSession, method, args);
-            log.debug("apiExec returned: {}", result);
-            return result;
-        } catch (NoSuchMethodException e) {
-            log.error("NoSuchMethodException looking for apiExec(String, String) on {}",
-                    sessionInterface.getName());
-            throw e;
-        } catch (Exception e) {
-            log.error("Error invoking apiExec: {} - {}", e.getClass().getName(), e.getMessage());
-            if (e.getCause() != null) {
-                log.error("Caused by: {} - {}", e.getCause().getClass().getName(), e.getCause().getMessage());
-            }
-            throw e;
-        }
+        boolean result = (Boolean) apiExecMethod.invoke(dfSession, method, args);
+        log.debug("apiExec returned: {}", result);
+        return result;
     }
 
     /**
@@ -280,25 +187,13 @@ public class DmApiServiceImpl implements DmApiService {
         Class<?> sessionInterface = Class.forName(DFC_SESSION_IFACE);
         log.debug("Looking up apiSet on interface: {}", sessionInterface.getName());
 
-        try {
-            Method apiSetMethod = sessionInterface.getMethod("apiSet", String.class, String.class, String.class);
-            log.debug("Found apiSet method: {} (declared in {})",
-                    apiSetMethod, apiSetMethod.getDeclaringClass().getName());
+        Method apiSetMethod = sessionInterface.getMethod("apiSet", String.class, String.class, String.class);
+        log.debug("Found apiSet method: {} (declared in {})",
+                apiSetMethod, apiSetMethod.getDeclaringClass().getName());
 
-            boolean result = (Boolean) apiSetMethod.invoke(dfSession, method, args, value);
-            log.debug("apiSet returned: {}", result);
-            return result;
-        } catch (NoSuchMethodException e) {
-            log.error("NoSuchMethodException looking for apiSet(String, String, String) on {}",
-                    sessionInterface.getName());
-            throw e;
-        } catch (Exception e) {
-            log.error("Error invoking apiSet: {} - {}", e.getClass().getName(), e.getMessage());
-            if (e.getCause() != null) {
-                log.error("Caused by: {} - {}", e.getCause().getClass().getName(), e.getCause().getMessage());
-            }
-            throw e;
-        }
+        boolean result = (Boolean) apiSetMethod.invoke(dfSession, method, args, value);
+        log.debug("apiSet returned: {}", result);
+        return result;
     }
 
     /**
