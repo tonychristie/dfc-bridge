@@ -1,5 +1,10 @@
 package com.spirecentral.dfcbridge.service.impl;
 
+import com.documentum.fc.common.DfTime;
+import com.documentum.fc.common.IDfId;
+import com.documentum.fc.common.IDfTime;
+import com.spirecentral.dfcbridge.dto.ApiRequest;
+import com.spirecentral.dfcbridge.exception.DfcBridgeException;
 import com.spirecentral.dfcbridge.model.AttributeValue;
 import com.spirecentral.dfcbridge.model.ObjectInfo;
 import com.spirecentral.dfcbridge.service.DfcSessionService;
@@ -497,6 +502,59 @@ class ObjectServiceImplTest {
         assertTrue(folderIds.isEmpty());
     }
 
+    // ========== executeApi argument conversion tests ==========
+
+    @Test
+    void executeApi_setTimeWithString_passesDfTime() {
+        MockDfSysObject mockObject = new MockDfSysObject();
+        stubSessionReturning(mockObject);
+
+        objectService.executeApi(apiRequest("setTime", "a_last_review_date", "04/11/2026 18:30:00"));
+
+        assertEquals("a_last_review_date", mockObject.getLastSetAttrName());
+        IDfTime time = assertInstanceOf(IDfTime.class, mockObject.getLastSetValue());
+        assertEquals("04/11/2026 18:30:00", time.toString());
+    }
+
+    @Test
+    void executeApi_setIdWithString_passesDfId() {
+        MockDfSysObject mockObject = new MockDfSysObject();
+        stubSessionReturning(mockObject);
+
+        objectService.executeApi(apiRequest("setId", "alias_set_id", "6604719980000101"));
+
+        assertEquals("alias_set_id", mockObject.getLastSetAttrName());
+        IDfId id = assertInstanceOf(IDfId.class, mockObject.getLastSetValue());
+        assertEquals("6604719980000101", id.getId());
+    }
+
+    @Test
+    void executeApi_setTimeWithInvalidTime_throwsApiErrorWithoutInvoking() {
+        MockDfSysObject mockObject = new MockDfSysObject();
+        stubSessionReturning(mockObject);
+        ApiRequest request = apiRequest("setTime", "a_last_review_date", DfTime.INVALID_VALUE);
+
+        DfcBridgeException e = assertThrows(DfcBridgeException.class, () -> objectService.executeApi(request));
+
+        assertEquals("API_ERROR", e.getCode());
+        assertNull(mockObject.getLastSetAttrName());
+    }
+
+    private void stubSessionReturning(Object object) {
+        MockDfSession mockSession = new MockDfSession();
+        mockSession.setObjectToReturn(object);
+        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+    }
+
+    private ApiRequest apiRequest(String method, Object... args) {
+        return ApiRequest.builder()
+                .sessionId("test-session")
+                .objectId("0900000180000001")
+                .method(method)
+                .args(List.of(args))
+                .build();
+    }
+
     // ========== Mock DFC Objects ==========
 
     /**
@@ -537,6 +595,8 @@ class ObjectServiceImplTest {
         private String objectName;
         private int permit;
         private int attrCount = 0;
+        private String lastSetAttrName;
+        private Object lastSetValue;
 
         public void setTypeName(String typeName) {
             this.typeName = typeName;
@@ -544,6 +604,24 @@ class ObjectServiceImplTest {
 
         public void setObjectName(String objectName) {
             this.objectName = objectName;
+        }
+
+        public void setTime(String attrName, IDfTime value) {
+            lastSetAttrName = attrName;
+            lastSetValue = value;
+        }
+
+        public void setId(String attrName, IDfId value) {
+            lastSetAttrName = attrName;
+            lastSetValue = value;
+        }
+
+        public String getLastSetAttrName() {
+            return lastSetAttrName;
+        }
+
+        public Object getLastSetValue() {
+            return lastSetValue;
         }
 
         public void setPermit(int permit) {
