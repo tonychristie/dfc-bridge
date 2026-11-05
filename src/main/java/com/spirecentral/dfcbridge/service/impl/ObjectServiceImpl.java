@@ -34,6 +34,9 @@ public class ObjectServiceImpl implements ObjectService {
     private static final Logger log = LoggerFactory.getLogger(ObjectServiceImpl.class);
 
     private static final String DFC_ID_CLASS = "com.documentum.fc.common.DfId";
+    private static final String DFC_ID_IFACE = "com.documentum.fc.common.IDfId";
+    private static final String DFC_TIME_CLASS = "com.documentum.fc.common.DfTime";
+    private static final String DFC_TIME_IFACE = "com.documentum.fc.common.IDfTime";
     private static final String DFC_SESSION_IFACE = "com.documentum.fc.client.IDfSession";
     private static final String DFC_SYSOBJ_IFACE = "com.documentum.fc.client.IDfSysObject";
     private static final String DFC_FOLDER_IFACE = "com.documentum.fc.client.IDfFolder";
@@ -541,8 +544,7 @@ public class ObjectServiceImpl implements ObjectService {
         Object dfId = dfIdClass.getConstructor(String.class).newInstance(objectId);
 
         Class<?> sessionClass = Class.forName(DFC_SESSION_IFACE);
-        Method getObjectMethod = sessionClass.getMethod("getObject",
-                Class.forName("com.documentum.fc.common.IDfId"));
+        Method getObjectMethod = sessionClass.getMethod("getObject", Class.forName(DFC_ID_IFACE));
 
         return getObjectMethod.invoke(dfSession, dfId);
     }
@@ -899,15 +901,40 @@ public class ObjectServiceImpl implements ObjectService {
 
                 if (paramCount == argCount) {
                     method.setAccessible(true);
-                    if (args == null || args.isEmpty()) {
-                        return method.invoke(target);
-                    } else {
-                        return method.invoke(target, args.toArray());
-                    }
+                    return method.invoke(target, convertArgs(method.getParameterTypes(), args));
                 }
             }
         }
         throw new NoSuchMethodException("Method not found: " + methodName);
+    }
+
+    private Object[] convertArgs(Class<?>[] paramTypes, List<Object> args) throws Exception {
+        if (args == null) {
+            return new Object[0];
+        }
+        Object[] converted = args.toArray();
+        for (int i = 0; i < converted.length; i++) {
+            if (!(converted[i] instanceof String)) {
+                continue;
+            }
+            String value = (String) converted[i];
+            String paramType = paramTypes[i].getName();
+            if (DFC_TIME_IFACE.equals(paramType)) {
+                converted[i] = toDfTime(value);
+            } else if (DFC_ID_IFACE.equals(paramType)) {
+                converted[i] = Class.forName(DFC_ID_CLASS).getConstructor(String.class).newInstance(value);
+            }
+        }
+        return converted;
+    }
+
+    // DfTime(String) does not throw on unparseable text; it returns an invalid time that saves as nulldate.
+    private Object toDfTime(String value) throws Exception {
+        Object time = Class.forName(DFC_TIME_CLASS).getConstructor(String.class).newInstance(value);
+        if (!(Boolean) time.getClass().getMethod("isValid").invoke(time)) {
+            throw new IllegalArgumentException("Invalid time value: " + value);
+        }
+        return time;
     }
 
     /**
