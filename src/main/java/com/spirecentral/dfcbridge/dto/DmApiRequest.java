@@ -15,7 +15,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * IDfSession.apiGet(), apiExec(), or apiSet() - not Java method invocations.
  *
  * Examples:
- * - dmAPIGet("getservermap,session")
+ * - dmAPIGet("getservermap,session,MyRepo")
  * - dmAPIGet("dump,session,0900000000000001")
  * - dmAPIExec("save,session,0900000000000001")
  * - dmAPISet("set,session,0900000000000001,object_name", "NewName")
@@ -37,7 +37,7 @@ public class DmApiRequest {
 
     @NotBlank(message = "Command is required")
     @Schema(description = "The dmAPI command string (without the type prefix)",
-            example = "getservermap,session")
+            example = "getservermap,session,MyRepo")
     private String command;
 
     @Schema(description = "The value for a set call, passed to apiSet unchanged. Required for set, ignored for get and exec",
