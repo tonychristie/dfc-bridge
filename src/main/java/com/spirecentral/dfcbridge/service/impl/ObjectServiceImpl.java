@@ -44,6 +44,7 @@ public class ObjectServiceImpl implements ObjectService {
     private static final String DFC_TIME_IFACE = "com.documentum.fc.common.IDfTime";
     private static final String DFC_SESSION_IFACE = "com.documentum.fc.client.IDfSession";
     private static final String DFC_SYSOBJ_IFACE = "com.documentum.fc.client.IDfSysObject";
+    private static final String DFC_FOLDER_IFACE = "com.documentum.fc.client.IDfFolder";
     private static final String DFC_TYPE_IFACE = "com.documentum.fc.client.IDfType";
     private static final String DFC_ACL_IFACE = "com.documentum.fc.client.IDfACL";
     private static final String DFC_COLLECTION_IFACE = "com.documentum.fc.client.IDfCollection";
@@ -266,7 +267,12 @@ public class ObjectServiceImpl implements ObjectService {
 
         return sessionService.withSession(sessionId, dfSession -> {
             try {
-                return listFolder(dfSession, getObjectById(dfSession, folderId));
+                Object folder = getObjectById(dfSession, folderId);
+                if (!Class.forName(DFC_FOLDER_IFACE).isInstance(folder)) {
+                    throw new ObjectNotFoundException("Folder not found: " + folderId);
+                }
+
+                return listFolder(dfSession, folder);
 
             } catch (ObjectNotFoundException e) {
                 throw e;

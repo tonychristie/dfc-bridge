@@ -791,6 +791,15 @@ class ObjectServiceImplTest {
     }
 
     @Test
+    void listFolderContentsById_objectIsNotFolder_throwsObjectNotFound() {
+        stubSessionReturning(new Object());
+
+        assertThrows(ObjectNotFoundException.class,
+                () -> objectService.listFolderContentsById("test-session", "0900000180000003"));
+        assertTrue(DfQuery.executed.isEmpty());
+    }
+
+    @Test
     void listFolderContents_runsOneQueryOnFolderId() {
         MockDfSession session = new MockDfSession();
         session.addFolder("/Temp/Reports", folder());
@@ -1502,13 +1511,14 @@ class ObjectServiceImplTest {
         }
     }
 
-    public static class MockDfFolder {
+    public static class MockDfFolder implements com.documentum.fc.client.IDfFolder {
         private final String objectId;
 
         public MockDfFolder(String objectId) {
             this.objectId = objectId;
         }
 
+        @Override
         public String getString(String attrName) {
             return "r_object_id".equals(attrName) ? objectId : null;
         }
