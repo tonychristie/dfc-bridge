@@ -197,16 +197,10 @@ CP="$DFC_CP:$DFC_CONFIG:BOOT-INF/classes:BOOT-INF/lib/*"
 
 ## Running the Application
 
-### Build and Extract
+### Build
 
 ```bash
-# Build the application
 mvn clean package
-
-# Extract the JAR (required for classpath manipulation)
-cd target
-unzip dfc-bridge-*.jar -d extracted
-cd ..
 ```
 
 ### Using the Startup Script (Recommended)
@@ -227,8 +221,11 @@ DFC_HOME=/path/to/dfc/shared ./start-dfc-bridge.sh
 
 ### Manual Invocation
 
+The bridge writes `logs/` under its working directory.
+
 ```bash
-cd target/extracted
+unzip dfc-bridge-*.jar -d <directory>
+cd <directory>
 
 # Build classpath (DFC log4j first)
 DFC_CP=""
@@ -259,7 +256,7 @@ java \
   --add-opens java.base/java.io=ALL-UNNAMED \
   --add-opens java.base/java.security=ALL-UNNAMED \
   -cp "$CP" \
-  com.spire.dfcbridge.DfcBridgeApplication
+  com.spirecentral.dfcbridge.DfcBridgeApplication
 ```
 
 ### Java 17+ Module Access
@@ -381,16 +378,6 @@ Expected response when DFC is available:
 3. **Environment variables:** Set via System Properties or batch file
 4. **Service deployment:** Use NSSM or Windows Service wrapper
 
-Example Windows batch file:
-```batch
-@echo off
-set DFC_HOME=C:\Documentum\shared
-set DFC_CONFIG=C:\Documentum\config
-set CLASSPATH=%DFC_HOME%\dfc.jar;%DFC_HOME%\*
-
-java -jar dfc-bridge.jar
-```
-
 ### Linux / WSL
 
 1. **Path separators:** Use colons (`:`) in CLASSPATH
@@ -414,38 +401,6 @@ Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
-```
-
-### Docker
-
-For containerized deployment:
-
-1. **Base image:** Use a JDK 17+ image
-2. **DFC libraries:** Mount or copy DFC JARs into the container
-3. **Configuration:** Mount dfc.properties as a volume
-
-Example Dockerfile:
-```dockerfile
-FROM eclipse-temurin:17-jre
-
-WORKDIR /app
-
-# Copy application
-COPY target/extracted/ /app/
-
-# DFC libraries must be provided at runtime via volume mount
-# docker run -v /path/to/dfc:/dfc ...
-
-ENV DFC_HOME=/dfc/shared
-ENV DFC_CONFIG=/dfc/config
-ENV SERVER_PORT=9876
-
-EXPOSE 9876
-
-COPY start-dfc-bridge.sh /app/
-RUN chmod +x /app/start-dfc-bridge.sh
-
-ENTRYPOINT ["/app/start-dfc-bridge.sh"]
 ```
 
 ---
