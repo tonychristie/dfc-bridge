@@ -1,6 +1,7 @@
 package com.spirecentral.dfcbridge.service.impl;
 
 import com.documentum.fc.client.DfQuery;
+import com.spirecentral.dfcbridge.exception.UserNotFoundException;
 import com.spirecentral.dfcbridge.model.GroupInfo;
 import com.spirecentral.dfcbridge.model.UserInfo;
 import com.spirecentral.dfcbridge.service.DfcSessionService;
@@ -48,7 +49,33 @@ class UserGroupServiceImplTest {
 
         userGroupService.listUsers("test-session", "dm_*");
 
-        assertTrue(DfQuery.executed.get(0).contains("WHERE user_name LIKE 'dm\\_%' ESCAPE '\\'"));
+        assertTrue(DfQuery.executed.get(0).contains(
+                "WHERE r_is_group = false AND user_name LIKE 'dm\\_%' ESCAPE '\\'"));
+    }
+
+    @Test
+    void listUsers_noPattern_excludesGroups() {
+        DfQuery.reset(dql -> new RowCollection());
+
+        userGroupService.listUsers("test-session", null);
+
+        assertTrue(DfQuery.executed.get(0).endsWith("FROM dm_user WHERE r_is_group = false ORDER BY user_name"));
+    }
+
+    @Test
+    void getUser_excludesGroups() {
+        DfQuery.reset(dql -> new RowCollection(userRow("dmadmin", 16)));
+
+        userGroupService.getUser("test-session", "dmadmin");
+
+        assertTrue(DfQuery.executed.get(0).endsWith("WHERE user_name = 'dmadmin' AND r_is_group = false"));
+    }
+
+    @Test
+    void getUser_noRow_throwsUserNotFound() {
+        DfQuery.reset(dql -> new RowCollection());
+
+        assertThrows(UserNotFoundException.class, () -> userGroupService.getUser("test-session", "admingroup"));
     }
 
     @Test
