@@ -62,7 +62,9 @@ The `start-dfc-bridge.sh` script provides an easy way to run DFC Bridge with or 
 mvn package
 ```
 
-On start, the script extracts the JAR into `target/extracted` when the JAR has changed since the last start.
+On start, the script extracts the JAR into `run/extracted` when the JAR has changed since the last start. The bridge writes its log to `run/logs`.
+
+The script also runs from the unzipped release bundle, where it uses the JAR beside it.
 
 **Run with DFC (production mode):**
 ```bash
@@ -109,12 +111,7 @@ On start, the script extracts the JAR into `target/extracted` when the JAR has c
 
 If you prefer not to use the startup script:
 
-**With DFC on classpath:**
-```bash
-export DFC_HOME=/opt/dctm/product/7.3
-export CLASSPATH=$DFC_HOME/shared/lib/dfc.jar:$DFC_HOME/shared/lib/*
-java -jar target/dfc-bridge-1.2.0.jar
-```
+**With DFC:** see [Manual Invocation](DEPLOYMENT.md#manual-invocation) in `DEPLOYMENT.md`.
 
 **Using Maven (development):**
 ```bash

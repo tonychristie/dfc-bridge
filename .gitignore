@@ -48,3 +48,6 @@ secrets/
 # Build
 build/
 out/
+
+# Start script run directory
+run/

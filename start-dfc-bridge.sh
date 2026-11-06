@@ -15,7 +15,9 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-EXTRACTED_DIR="$SCRIPT_DIR/target/extracted"
+RUN_DIR="$SCRIPT_DIR/run"
+EXTRACTED_DIR="$RUN_DIR/extracted"
+PID_FILE="$RUN_DIR/dfc-bridge.pid"
 
 # Defaults
 MODE="dfc"
@@ -171,7 +173,7 @@ fi
 
 # Find the newest built JAR
 JAR=""
-for candidate in "$SCRIPT_DIR"/target/dfc-bridge-*.jar; do
+for candidate in "$SCRIPT_DIR"/target/dfc-bridge-*.jar "$SCRIPT_DIR"/dfc-bridge-*.jar; do
     [ -e "$candidate" ] || continue
     if [ -z "$JAR" ] || [ "$candidate" -nt "$JAR" ]; then
         JAR="$candidate"
@@ -179,29 +181,45 @@ for candidate in "$SCRIPT_DIR"/target/dfc-bridge-*.jar; do
 done
 
 if [ -z "$JAR" ]; then
-    echo "Error: No dfc-bridge-*.jar found in $SCRIPT_DIR/target"
+    echo "Error: No dfc-bridge-*.jar found in $SCRIPT_DIR/target or $SCRIPT_DIR"
     echo "Run: mvn package"
     exit 1
 fi
 
-# Extract the JAR when it is newer than the last extraction.
-# Extracted file timestamps come from the JAR and the running bridge writes
-# into the directory, so a marker file records when the extraction happened.
-# logs/ and the DFC data directory are left in place.
-EXTRACT_MARKER="$EXTRACTED_DIR/.extracted"
-if [ ! -f "$EXTRACT_MARKER" ] || [ "$JAR" -nt "$EXTRACT_MARKER" ]; then
-    echo "Extracting $(basename "$JAR")..."
-    rm -rf "$EXTRACTED_DIR/BOOT-INF" "$EXTRACTED_DIR/META-INF" "$EXTRACTED_DIR/org"
-    unzip -q -o "$JAR" -d "$EXTRACTED_DIR"
-    touch "$EXTRACT_MARKER"
+# Must run before any extraction: replacing the extracted classes under a
+# running bridge makes it fail on its next class load.
+if [ -f "$PID_FILE" ]; then
+    RUNNING_PID=$(cat "$PID_FILE")
+    case "$RUNNING_PID" in
+        ''|*[!0-9]*) ;;
+        *)
+            if ps -p "$RUNNING_PID" -o args= 2>/dev/null | grep -q DfcBridgeApplication; then
+                echo "DFC Bridge is already running (PID $RUNNING_PID). Stop it before starting again."
+                exit 1
+            fi
+            ;;
+    esac
 fi
 
-cd "$EXTRACTED_DIR"
+# The marker lives inside the extracted tree and is written last, so a failed
+# or interrupted unzip leaves no matching marker. The time is read before the
+# unzip so that a jar rewritten during it is extracted again on the next start.
+EXTRACT_MARKER="$EXTRACTED_DIR/.extracted"
+JAR_STAMP="$JAR"$'\n'"$(stat -c %y "$JAR")"
+if [ ! -f "$EXTRACT_MARKER" ] || [ "$(cat "$EXTRACT_MARKER")" != "$JAR_STAMP" ]; then
+    echo "Extracting $JAR"
+    rm -rf "$EXTRACTED_DIR"
+    mkdir -p "$EXTRACTED_DIR"
+    unzip -q "$JAR" -d "$EXTRACTED_DIR"
+    printf '%s\n' "$JAR_STAMP" > "$EXTRACT_MARKER"
+fi
+
+cd "$RUN_DIR"
 
 # Build Spring Boot lib classpath (exclude log4j-to-slf4j bridge to avoid conflict with DFC)
 build_boot_classpath() {
     local BOOT_CP=""
-    for jar in BOOT-INF/lib/*.jar; do
+    for jar in "$EXTRACTED_DIR"/BOOT-INF/lib/*.jar; do
         case "$jar" in
             *log4j-to-slf4j*)
                 # Skip this conflicting bridge when in DFC mode
@@ -271,14 +289,14 @@ if [[ "$MODE" == "dfc" ]]; then
     fi
 
     DFC_CP=$(build_dfc_classpath)
-    CP="$DFC_CP:$DFC_CONFIG:BOOT-INF/classes:$BOOT_CP"
+    CP="$DFC_CP:$DFC_CONFIG:$EXTRACTED_DIR/BOOT-INF/classes:$BOOT_CP"
 
     echo "Starting DFC Bridge in DFC mode..."
     echo "  DFC_HOME: $DFC_HOME"
     echo "  Port: $SERVER_PORT"
 else
     # No-DFC mode: just app classes and boot libs
-    CP="BOOT-INF/classes:$BOOT_CP"
+    CP="$EXTRACTED_DIR/BOOT-INF/classes:$BOOT_CP"
 
     echo "Starting DFC Bridge in NO-DFC mode (development/testing)..."
     echo "  Port: $SERVER_PORT"
@@ -286,6 +304,9 @@ else
 fi
 
 echo ""
+
+# exec keeps this PID for the bridge
+echo $$ > "$PID_FILE"
 
 # Run the application
 exec java \
