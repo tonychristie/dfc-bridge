@@ -23,6 +23,14 @@ public interface IDfSession {
     Object getObject(IDfId objectId) throws DfException;
 
     /**
+     * Get a type definition by name.
+     *
+     * @param typeName the type name
+     * @return the type, or null when no type has the name
+     */
+    Object getType(String typeName);
+
+    /**
      * Check whether the session is connected.
      *
      * @return false once the session has been released
