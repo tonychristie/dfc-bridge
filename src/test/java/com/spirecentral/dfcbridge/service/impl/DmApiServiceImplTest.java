@@ -374,37 +374,29 @@ class DmApiServiceImplTest {
     // ========== apiSet tests ==========
 
     @Test
-    void apiSet_splitsCommandAndStripsSession() {
-        // Arrange
+    void apiSet_passesValueWithCommaUnchanged() {
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiSetResult(true);
         stubSession(mockSession);
 
-        // Command: "set,session,objectId,attrName,value"
-        // After stripping "session": method="set", args="objectId,attrName", value="NewName"
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
                 .apiType("set")
-                .command("set,session,0900000180000001,object_name,NewName")
+                .command("set,session,0900000180000001,title")
+                .value("Smith, John")
                 .build();
 
-        // Act
         ApiResponse response = dmApiService.execute(request);
 
-        // Assert
-        assertNotNull(response);
         assertEquals(true, response.getResult());
         assertEquals("Boolean", response.getResultType());
-        assertTrue(mockSession.isApiSetCalled());
         assertEquals("set", mockSession.getLastApiSetMethod());
-        // "session" should be stripped
-        assertEquals("0900000180000001,object_name", mockSession.getLastApiSetArgs());
-        assertEquals("NewName", mockSession.getLastApiSetValue());
+        assertEquals("0900000180000001,title", mockSession.getLastApiSetArgs());
+        assertEquals("Smith, John", mockSession.getLastApiSetValue());
     }
 
     @Test
-    void apiSet_handlesValueWithCommas() {
-        // Arrange - value is everything after the last comma in the args portion
+    void apiSet_passesEmptyValueAsEmptyString() {
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiSetResult(true);
         stubSession(mockSession);
@@ -412,37 +404,32 @@ class DmApiServiceImplTest {
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
                 .apiType("set")
-                .command("set,session,0900000180000001,title,Value with special, chars")
+                .command("set,session,0900000180000001,title")
+                .value("")
                 .build();
 
-        // Act
-        ApiResponse response = dmApiService.execute(request);
+        dmApiService.execute(request);
 
-        // Assert - "session" is stripped
         assertTrue(mockSession.isApiSetCalled());
-        assertEquals("set", mockSession.getLastApiSetMethod());
-        assertEquals("0900000180000001,title,Value with special", mockSession.getLastApiSetArgs());
-        assertEquals(" chars", mockSession.getLastApiSetValue());
+        assertEquals("", mockSession.getLastApiSetValue());
     }
 
     @Test
-    void apiSet_throwsExceptionForMissingValue() {
-        // Arrange - command with method but no value separator in args
+    void apiSet_withoutValue_throwsInvalidSetCommand() {
         MockDfSession mockSession = new MockDfSession();
         stubSession(mockSession);
 
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
                 .apiType("set")
-                .command("set,novalue")
+                .command("set,session,0900000180000001,title,Smith")
                 .build();
 
-        // Act & Assert
         DfcBridgeException exception = assertThrows(DfcBridgeException.class,
                 () -> dmApiService.execute(request));
 
         assertEquals("INVALID_SET_COMMAND", exception.getCode());
-        assertTrue(exception.getMessage().contains("Invalid apiSet command format"));
+        assertFalse(mockSession.isApiSetCalled());
     }
 
     @Test
@@ -455,7 +442,8 @@ class DmApiServiceImplTest {
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
                 .apiType("SET")  // uppercase
-                .command("set,session,0900000180000001,attr,value")
+                .command("set,session,0900000180000001,attr")
+                .value("value")
                 .build();
 
         // Act
