@@ -50,9 +50,9 @@ public class UserGroupServiceImpl implements UserGroupService {
 
         return sessionService.withSession(sessionId, dfSession -> {
             try {
-                String dql = USER_SELECT;
+                String dql = USER_SELECT + " WHERE r_is_group = false";
                 if (pattern != null && !pattern.isEmpty()) {
-                    dql += " WHERE user_name LIKE '" + DfcTypeUtils.toLikePattern(pattern) + "' ESCAPE '\\'";
+                    dql += " AND user_name LIKE '" + DfcTypeUtils.toLikePattern(pattern) + "' ESCAPE '\\'";
                 }
                 dql += " ORDER BY user_name";
 
@@ -71,7 +71,8 @@ public class UserGroupServiceImpl implements UserGroupService {
 
         return sessionService.withSession(sessionId, dfSession -> {
             try {
-                String dql = USER_SELECT + " WHERE user_name = '" + DfcTypeUtils.sanitizeDqlString(userName) + "'";
+                String dql = USER_SELECT + " WHERE user_name = '" + DfcTypeUtils.sanitizeDqlString(userName) +
+                        "' AND r_is_group = false";
 
                 return DfcQuery.first(dfSession, dql, this::toUserInfo)
                         .orElseThrow(() -> new UserNotFoundException(userName));
