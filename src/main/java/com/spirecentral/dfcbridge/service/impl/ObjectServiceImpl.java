@@ -12,6 +12,8 @@ import com.spirecentral.dfcbridge.model.TypeInfo;
 import com.spirecentral.dfcbridge.service.DfcSessionService;
 import com.spirecentral.dfcbridge.service.ObjectService;
 import com.spirecentral.dfcbridge.util.DfcExceptionUtils;
+import com.spirecentral.dfcbridge.util.DfcQuery;
+import com.spirecentral.dfcbridge.util.DfcReflection;
 import com.spirecentral.dfcbridge.util.DfcTypeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +25,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -41,13 +44,20 @@ public class ObjectServiceImpl implements ObjectService {
     private static final String DFC_TIME_IFACE = "com.documentum.fc.common.IDfTime";
     private static final String DFC_SESSION_IFACE = "com.documentum.fc.client.IDfSession";
     private static final String DFC_SYSOBJ_IFACE = "com.documentum.fc.client.IDfSysObject";
-    private static final String DFC_FOLDER_IFACE = "com.documentum.fc.client.IDfFolder";
     private static final String DFC_TYPE_IFACE = "com.documentum.fc.client.IDfType";
     private static final String DFC_ACL_IFACE = "com.documentum.fc.client.IDfACL";
     private static final String DFC_COLLECTION_IFACE = "com.documentum.fc.client.IDfCollection";
 
     private static final int DM_INTEGER = 1;
+    private static final int DM_STRING = 2;
+    private static final int DM_ID = 3;
+    private static final int DM_TIME = 4;
     private static final int DM_DOUBLE = 5;
+
+    private static final Class<?>[] NO_PARAMS = new Class<?>[0];
+    private static final Class<?>[] STRING_PARAM = {String.class};
+    private static final Class<?>[] INT_PARAM = {int.class};
+    private static final Class<?>[] STRING_INT_PARAMS = {String.class, int.class};
 
     private final DfcSessionService sessionService;
 
@@ -60,45 +70,14 @@ public class ObjectServiceImpl implements ObjectService {
         log.debug("Getting cabinets via DFC");
 
         return sessionService.withSession(sessionId, dfSession -> {
-            List<ObjectInfo> cabinets = new ArrayList<>();
-
             try {
-                // Query for all cabinets
                 String dql = "SELECT r_object_id, object_name, r_object_type FROM dm_cabinet ORDER BY object_name";
 
-                Class<?> sessionClass = Class.forName(DFC_SESSION_IFACE);
-                Class<?> dfQueryClass = Class.forName("com.documentum.fc.client.DfQuery");
-                Object query = dfQueryClass.getDeclaredConstructor().newInstance();
-
-                Method setDqlMethod = dfQueryClass.getMethod("setDQL", String.class);
-                setDqlMethod.invoke(query, dql);
-
-                Class<?> queryInterface = Class.forName("com.documentum.fc.client.IDfQuery");
-                Method executeMethod = queryInterface.getMethod("execute", sessionClass, int.class);
-                Object collection = executeMethod.invoke(query, dfSession, 0);
-
-                Class<?> collectionClass = collection.getClass();
-                Method nextMethod = collectionClass.getMethod("next");
-                Method closeMethod = collectionClass.getMethod("close");
-                Method getStringMethod = collectionClass.getMethod("getString", String.class);
-
-                try {
-                    while ((Boolean) nextMethod.invoke(collection)) {
-                        String objectId = (String) getStringMethod.invoke(collection, "r_object_id");
-                        String objectName = (String) getStringMethod.invoke(collection, "object_name");
-                        String objectType = (String) getStringMethod.invoke(collection, "r_object_type");
-
-                        cabinets.add(ObjectInfo.builder()
-                                .objectId(objectId)
-                                .name(objectName)
-                                .type(objectType)
-                                .build());
-                    }
-                } finally {
-                    closeMethod.invoke(collection);
-                }
-
-                return cabinets;
+                return DfcQuery.list(dfSession, dql, row -> ObjectInfo.builder()
+                        .objectId(DfcQuery.getString(row, "r_object_id"))
+                        .name(DfcQuery.getString(row, "object_name"))
+                        .type(DfcQuery.getString(row, "r_object_type"))
+                        .build());
 
             } catch (Exception e) {
                 throw new DfcBridgeException("CABINET_ERROR",
@@ -143,15 +122,14 @@ public class ObjectServiceImpl implements ObjectService {
                 }
 
                 if (request.isSave()) {
-                    Method saveMethod = sysObject.getClass().getMethod("save");
-                    saveMethod.invoke(sysObject);
+                    DfcReflection.invoke(sysObject, "save");
                     unsaved = false;
                 }
 
                 ObjectInfo info = extractObjectInfo(sysObject, objectId);
                 if (unsaved) {
                     unsaved = false;
-                    sysObject.getClass().getMethod("revert").invoke(sysObject);
+                    DfcReflection.invoke(sysObject, "revert");
                 }
                 return info;
 
@@ -172,43 +150,14 @@ public class ObjectServiceImpl implements ObjectService {
         log.debug("Listing folder contents: {}", folderPath);
 
         return sessionService.withSession(sessionId, dfSession -> {
-            List<ObjectInfo> contents = new ArrayList<>();
-
             try {
-                // Get folder by path
-                Class<?> sessionClass = Class.forName(DFC_SESSION_IFACE);
-                Method getFolderByPathMethod = sessionClass.getMethod("getFolderByPath", String.class);
-                Object folder = getFolderByPathMethod.invoke(dfSession, folderPath);
-
+                Object folder = DfcReflection.invoke(DFC_SESSION_IFACE, dfSession, "getFolderByPath",
+                        STRING_PARAM, folderPath);
                 if (folder == null) {
                     throw new ObjectNotFoundException("Folder not found: " + folderPath);
                 }
 
-                // Get folder contents
-                Class<?> folderClass = Class.forName(DFC_FOLDER_IFACE);
-                Method getContentsMethod = folderClass.getMethod("getContents", String.class);
-                Object collection = getContentsMethod.invoke(folder, null);
-
-                // Iterate through collection
-                Class<?> collectionClass = collection.getClass();
-                Method nextMethod = collectionClass.getMethod("next");
-                Method closeMethod = collectionClass.getMethod("close");
-
-                try {
-                    while ((Boolean) nextMethod.invoke(collection)) {
-                        Method getIdMethod = collectionClass.getMethod("getId", String.class);
-                        Object id = getIdMethod.invoke(collection, "r_object_id");
-                        String objectId = id.toString();
-
-                        // Get brief info for each object
-                        Object obj = getObjectById(dfSession, objectId);
-                        contents.add(extractObjectInfo(obj, objectId));
-                    }
-                } finally {
-                    closeMethod.invoke(collection);
-                }
-
-                return contents;
+                return listFolder(dfSession, folder);
 
             } catch (ObjectNotFoundException e) {
                 throw e;
@@ -225,9 +174,7 @@ public class ObjectServiceImpl implements ObjectService {
 
         return sessionService.withSession(sessionId, dfSession -> {
             try {
-                Class<?> sessionClass = Class.forName(DFC_SESSION_IFACE);
-                Method getTypeMethod = sessionClass.getMethod("getType", String.class);
-                Object type = getTypeMethod.invoke(dfSession, typeName);
+                Object type = DfcReflection.invoke(DFC_SESSION_IFACE, dfSession, "getType", STRING_PARAM, typeName);
 
                 if (type == null) {
                     throw new ObjectNotFoundException("Type not found: " + typeName);
@@ -249,51 +196,21 @@ public class ObjectServiceImpl implements ObjectService {
         log.debug("Listing types with pattern: {}", pattern);
 
         return sessionService.withSession(sessionId, dfSession -> {
-            List<TypeInfo> types = new ArrayList<>();
-
             try {
-                // Query for types
-                String dql = "SELECT name FROM dm_type";
+                String dql = "SELECT name, super_name FROM dm_type";
                 if (pattern != null && !pattern.isEmpty()) {
-                    // Escape single quotes to prevent SQL injection
-                    String sanitizedPattern = DfcTypeUtils.sanitizeDqlString(pattern).replace("*", "%");
-                    dql += " WHERE name LIKE '" + sanitizedPattern + "'";
+                    dql += " WHERE name LIKE '" + DfcTypeUtils.toLikePattern(pattern) + "' ESCAPE '\\'";
                 }
                 dql += " ORDER BY name";
 
-                Class<?> sessionClass = Class.forName(DFC_SESSION_IFACE);
-
-                // Create and execute query using the same pattern as DqlService
-                Class<?> dfQueryClass = Class.forName("com.documentum.fc.client.DfQuery");
-                Object query = dfQueryClass.getDeclaredConstructor().newInstance();
-
-                Method setDqlMethod = dfQueryClass.getMethod("setDQL", String.class);
-                setDqlMethod.invoke(query, dql);
-
-                Class<?> queryInterface = Class.forName("com.documentum.fc.client.IDfQuery");
-                Method executeMethod = queryInterface.getMethod("execute", sessionClass, int.class);
-                Object collection = executeMethod.invoke(query, dfSession, 0);
-
-                Class<?> collectionClass = collection.getClass();
-                Method nextMethod = collectionClass.getMethod("next");
-                Method closeMethod = collectionClass.getMethod("close");
-                Method getStringMethod = collectionClass.getMethod("getString", String.class);
-
-                try {
-                    while ((Boolean) nextMethod.invoke(collection)) {
-                        String typeName = (String) getStringMethod.invoke(collection, "name");
-                        try {
-                            types.add(getTypeInfo(sessionId, typeName));
-                        } catch (Exception e) {
-                            // Skip types that can't be loaded
-                            log.debug("Could not load type {}: {}", typeName, e.getMessage());
-                        }
-                    }
-                } finally {
-                    closeMethod.invoke(collection);
-                }
-
-                return types;
+                return DfcQuery.list(dfSession, dql, row -> {
+                    String name = DfcQuery.getString(row, "name");
+                    return TypeInfo.builder()
+                            .name(name)
+                            .superType(DfcQuery.getString(row, "super_name"))
+                            .systemType(isSystemType(name))
+                            .build();
+                });
 
             } catch (Exception e) {
                 throw new DfcBridgeException("TYPE_LIST_ERROR",
@@ -314,9 +231,8 @@ public class ObjectServiceImpl implements ObjectService {
                 if (request.getObjectId() != null) {
                     target = getObjectById(dfSession, request.getObjectId());
                 } else if (request.getTypeName() != null) {
-                    Class<?> sessionClass = Class.forName(DFC_SESSION_IFACE);
-                    Method getTypeMethod = sessionClass.getMethod("getType", String.class);
-                    target = getTypeMethod.invoke(dfSession, request.getTypeName());
+                    target = DfcReflection.invoke(DFC_SESSION_IFACE, dfSession, "getType", STRING_PARAM,
+                            request.getTypeName());
                     if (target == null) {
                         throw new ObjectNotFoundException("Type not found: " + request.getTypeName());
                     }
@@ -349,36 +265,8 @@ public class ObjectServiceImpl implements ObjectService {
         log.debug("Listing folder contents by ID: {}", folderId);
 
         return sessionService.withSession(sessionId, dfSession -> {
-            List<ObjectInfo> contents = new ArrayList<>();
-
             try {
-                Object folder = getObjectById(dfSession, folderId);
-
-                // Get folder contents
-                Class<?> folderClass = Class.forName(DFC_FOLDER_IFACE);
-                Method getContentsMethod = folderClass.getMethod("getContents", String.class);
-                Object collection = getContentsMethod.invoke(folder, (String) null);
-
-                // Iterate through collection
-                Class<?> collectionClass = collection.getClass();
-                Method nextMethod = collectionClass.getMethod("next");
-                Method closeMethod = collectionClass.getMethod("close");
-
-                try {
-                    while ((Boolean) nextMethod.invoke(collection)) {
-                        Method getIdMethod = collectionClass.getMethod("getId", String.class);
-                        Object id = getIdMethod.invoke(collection, "r_object_id");
-                        String objectId = id.toString();
-
-                        // Get brief info for each object
-                        Object obj = getObjectById(dfSession, objectId);
-                        contents.add(extractObjectInfo(obj, objectId));
-                    }
-                } finally {
-                    closeMethod.invoke(collection);
-                }
-
-                return contents;
+                return listFolder(dfSession, getObjectById(dfSession, folderId));
 
             } catch (ObjectNotFoundException e) {
                 throw e;
@@ -397,9 +285,7 @@ public class ObjectServiceImpl implements ObjectService {
             try {
                 Object sysObject = getObjectById(dfSession, objectId);
 
-                // Call checkout
-                Method checkoutMethod = sysObject.getClass().getMethod("checkout");
-                checkoutMethod.invoke(sysObject);
+                DfcReflection.invoke(sysObject, "checkout");
 
                 return extractObjectInfo(sysObject, objectId);
 
@@ -420,9 +306,7 @@ public class ObjectServiceImpl implements ObjectService {
             try {
                 Object sysObject = getObjectById(dfSession, objectId);
 
-                // Call cancelCheckout
-                Method cancelCheckoutMethod = sysObject.getClass().getMethod("cancelCheckout");
-                cancelCheckoutMethod.invoke(sysObject);
+                DfcReflection.invoke(sysObject, "cancelCheckout");
                 return null;
 
             } catch (ObjectNotFoundException e) {
@@ -442,9 +326,8 @@ public class ObjectServiceImpl implements ObjectService {
             try {
                 Object sysObject = getObjectById(dfSession, objectId);
 
-                // Call checkin with version label
-                Method checkinMethod = sysObject.getClass().getMethod("checkin", boolean.class, String.class);
-                Object newId = checkinMethod.invoke(sysObject, false, versionLabel);
+                Object newId = DfcReflection.invoke(sysObject, "checkin",
+                        new Class<?>[]{boolean.class, String.class}, false, versionLabel);
 
                 // Get the new version
                 String newObjectId = newId.toString();
@@ -466,16 +349,11 @@ public class ObjectServiceImpl implements ObjectService {
 
         return sessionService.withSession(sessionId, dfSession -> {
             try {
-                Class<?> sessionClass = Class.forName(DFC_SESSION_IFACE);
+                Object newObject = DfcReflection.invoke(DFC_SESSION_IFACE, dfSession, "newObject", STRING_PARAM,
+                        request.getObjectType());
 
-                // Create new object
-                Method newObjectMethod = sessionClass.getMethod("newObject", String.class);
-                Object newObject = newObjectMethod.invoke(dfSession, request.getObjectType());
-
-                // Set object name if provided
                 if (request.getObjectName() != null) {
-                    Method setObjectNameMethod = newObject.getClass().getMethod("setObjectName", String.class);
-                    setObjectNameMethod.invoke(newObject, request.getObjectName());
+                    DfcReflection.invoke(newObject, "setObjectName", STRING_PARAM, request.getObjectName());
                 }
 
                 // Set additional attributes if provided
@@ -486,20 +364,13 @@ public class ObjectServiceImpl implements ObjectService {
                     }
                 }
 
-                // Link to folder if path provided
                 if (request.getFolderPath() != null && !request.getFolderPath().isEmpty()) {
-                    Method linkMethod = newObject.getClass().getMethod("link", String.class);
-                    linkMethod.invoke(newObject, request.getFolderPath());
+                    DfcReflection.invoke(newObject, "link", STRING_PARAM, request.getFolderPath());
                 }
 
-                // Save the object
-                Method saveMethod = newObject.getClass().getMethod("save");
-                saveMethod.invoke(newObject);
+                DfcReflection.invoke(newObject, "save");
 
-                // Get the object ID
-                Method getObjectIdMethod = newObject.getClass().getMethod("getObjectId");
-                Object objectId = getObjectIdMethod.invoke(newObject);
-                String newObjectId = objectId.toString();
+                String newObjectId = DfcReflection.invoke(newObject, "getObjectId").toString();
 
                 return extractObjectInfo(newObject, newObjectId);
 
@@ -518,15 +389,7 @@ public class ObjectServiceImpl implements ObjectService {
             try {
                 Object sysObject = getObjectById(dfSession, objectId);
 
-                if (allVersions) {
-                    // Delete all versions
-                    Method destroyAllVersionsMethod = sysObject.getClass().getMethod("destroyAllVersions");
-                    destroyAllVersionsMethod.invoke(sysObject);
-                } else {
-                    // Delete just this version
-                    Method destroyMethod = sysObject.getClass().getMethod("destroy");
-                    destroyMethod.invoke(sysObject);
-                }
+                DfcReflection.invoke(sysObject, allVersions ? "destroyAllVersions" : "destroy");
                 return null;
 
             } catch (ObjectNotFoundException e) {
@@ -538,15 +401,30 @@ public class ObjectServiceImpl implements ObjectService {
         });
     }
 
-    private Object getObjectById(Object dfSession, String objectId) throws Exception {
-        Class<?> dfIdClass = Class.forName(DFC_ID_CLASS);
-        Object dfId = dfIdClass.getConstructor(String.class).newInstance(objectId);
+    private List<ObjectInfo> listFolder(Object dfSession, Object folder) throws Exception {
+        String folderId = (String) DfcReflection.invoke(folder, "getString", STRING_PARAM, "r_object_id");
+        String dql = "SELECT r_object_id, object_name, r_object_type, a_content_type FROM dm_sysobject " +
+                "WHERE FOLDER(ID('" + DfcTypeUtils.sanitizeDqlString(folderId) + "')) ORDER BY object_name";
 
-        Class<?> sessionClass = Class.forName(DFC_SESSION_IFACE);
-        Method getObjectMethod = sessionClass.getMethod("getObject", Class.forName(DFC_ID_IFACE));
+        return DfcQuery.list(dfSession, dql, row -> {
+            Map<String, AttributeValue> attributes = new HashMap<>();
+            attributes.put("a_content_type",
+                    AttributeValue.single(dataTypeToName(DM_STRING), DfcQuery.getString(row, "a_content_type")));
+            return ObjectInfo.builder()
+                    .objectId(DfcQuery.getString(row, "r_object_id"))
+                    .type(DfcQuery.getString(row, "r_object_type"))
+                    .name(DfcQuery.getString(row, "object_name"))
+                    .attributes(attributes)
+                    .build();
+        });
+    }
+
+    private Object getObjectById(Object dfSession, String objectId) throws Exception {
+        Object dfId = DfcReflection.newInstance(DFC_ID_CLASS, STRING_PARAM, objectId);
 
         try {
-            return getObjectMethod.invoke(dfSession, dfId);
+            return DfcReflection.invoke(DFC_SESSION_IFACE, dfSession, "getObject",
+                    new Class<?>[]{Class.forName(DFC_ID_IFACE)}, dfId);
         } catch (InvocationTargetException e) {
             if (DfcExceptionUtils.isInstanceOf(e.getTargetException(), DfcExceptionUtils.DFC_ID_NOT_FOUND_EXCEPTION)) {
                 throw new ObjectNotFoundException(objectId);
@@ -556,7 +434,7 @@ public class ObjectServiceImpl implements ObjectService {
     }
 
     private ObjectInfo extractObjectInfo(Object sysObject, String objectId) throws Exception {
-        String typeName = (String) invokeReflection(sysObject, "getTypeName");
+        String typeName = (String) DfcReflection.invoke(sysObject, "getTypeName");
         String objectName = getNameForType(sysObject, typeName);
         int permit = getPermitSafe(sysObject);
 
@@ -580,7 +458,7 @@ public class ObjectServiceImpl implements ObjectService {
 
     private int getPermitSafe(Object dfObject) {
         try {
-            return (Integer) invokeReflection(dfObject, "getPermit");
+            return (Integer) DfcReflection.invoke(dfObject, "getPermit");
         } catch (Exception e) {
             // Non-sysobject types don't have getPermit
             return -1;
@@ -594,8 +472,8 @@ public class ObjectServiceImpl implements ObjectService {
 
         for (String attr : nameAttrs) {
             if (hasAttribute(dfObject, attr)) {
-                String value = (String) invokeReflection(dfObject, "getString",
-                        new Class<?>[]{String.class}, attr);
+                String value = (String) DfcReflection.invoke(dfObject, "getString",
+                        STRING_PARAM, attr);
                 if (value != null && !value.isEmpty()) {
                     return value;
                 }
@@ -608,8 +486,8 @@ public class ObjectServiceImpl implements ObjectService {
 
     private boolean hasAttribute(Object dfObject, String attrName) {
         try {
-            return (Boolean) invokeReflection(dfObject, "hasAttr",
-                    new Class<?>[]{String.class}, attrName);
+            return (Boolean) DfcReflection.invoke(dfObject, "hasAttr",
+                    STRING_PARAM, attrName);
         } catch (Exception e) {
             return false;
         }
@@ -623,16 +501,16 @@ public class ObjectServiceImpl implements ObjectService {
         // The type definition is the authoritative source for attribute data types
         Map<String, Integer> typeAttrDataTypes = buildTypeAttrDataTypes(sysObject);
 
-        int attrCount = (Integer) invokeReflection(sysObject, "getAttrCount");
+        int attrCount = (Integer) DfcReflection.invoke(sysObject, "getAttrCount");
 
         for (int i = 0; i < attrCount; i++) {
-            Object attr = invokeReflection(sysObject, "getAttr", new Class<?>[]{int.class}, i);
-            String attrName = (String) invokeReflection(attr, "getName");
-            boolean isRepeating = (Boolean) invokeReflection(attr, "isRepeating");
+            Object attr = DfcReflection.invoke(sysObject, "getAttr", INT_PARAM, i);
+            String attrName = (String) DfcReflection.invoke(attr, "getName");
+            boolean isRepeating = (Boolean) DfcReflection.invoke(attr, "isRepeating");
 
             // Use type definition data type if available, otherwise fall back to object's attr
             int dataType = typeAttrDataTypes.getOrDefault(attrName,
-                    (Integer) invokeReflection(attr, "getDataType"));
+                    (Integer) DfcReflection.invoke(attr, "getDataType"));
             String typeName = dataTypeToName(dataType);
 
             try {
@@ -663,24 +541,24 @@ public class ObjectServiceImpl implements ObjectService {
         Map<String, Integer> dataTypes = new HashMap<>();
         try {
             // Get the session from the object
-            Object session = invokeReflection(sysObject, "getSession");
+            Object session = DfcReflection.invoke(sysObject, "getSession");
 
             // Get the object's type name
-            String objectTypeName = (String) invokeReflection(sysObject, "getTypeName");
+            String objectTypeName = (String) DfcReflection.invoke(sysObject, "getTypeName");
 
             // Get the type definition from the session
-            Object type = invokeReflection(session, "getType", new Class<?>[]{String.class}, objectTypeName);
+            Object type = DfcReflection.invoke(session, "getType", STRING_PARAM, objectTypeName);
             if (type == null) {
                 log.debug("Could not get type definition for {}", objectTypeName);
                 return dataTypes;
             }
 
             // Iterate through the type's attributes and build the data type map
-            int typeAttrCount = (Integer) invokeReflection(type, "getTypeAttrCount");
+            int typeAttrCount = (Integer) DfcReflection.invoke(type, "getTypeAttrCount");
             for (int i = 0; i < typeAttrCount; i++) {
-                Object typeAttr = invokeReflection(type, "getTypeAttr", new Class<?>[]{int.class}, i);
-                String attrName = (String) invokeReflection(typeAttr, "getName");
-                int dataType = (Integer) invokeReflection(typeAttr, "getDataType");
+                Object typeAttr = DfcReflection.invoke(type, "getTypeAttr", INT_PARAM, i);
+                String attrName = (String) DfcReflection.invoke(typeAttr, "getName");
+                int dataType = (Integer) DfcReflection.invoke(typeAttr, "getDataType");
                 dataTypes.put(attrName, dataType);
             }
         } catch (Exception e) {
@@ -689,35 +567,17 @@ public class ObjectServiceImpl implements ObjectService {
         return dataTypes;
     }
 
-    /**
-     * Convert DFC data type constant to human-readable type name.
-     */
     private String dataTypeToName(int dataType) {
-        // DFC data type constants (from IDfAttr):
-        // DM_BOOLEAN=0, DM_INTEGER=1, DM_STRING=2, DM_ID=3, DM_TIME=4, DM_DOUBLE=5
-        return switch (dataType) {
-            case 0 -> "boolean";
-            case 1 -> "integer";
-            case 2 -> "string";
-            case 3 -> "id";
-            case 4 -> "time";
-            case 5 -> "double";
-            default -> "unknown";
-        };
+        return DfcTypeUtils.dataTypeToString(dataType).toLowerCase(Locale.ROOT);
     }
 
     private Object extractSingleAttributeValue(Object sysObject, String attrName, int dataType) throws Exception {
-        // For ID attributes, use getString to get consistent string representation
-        // getId returns IDfId which may lose leading zeros when serialized
-        if (dataType == 3) { // DM_ID type
-            return invokeReflection(sysObject, "getString", new Class<?>[]{String.class}, attrName);
-        }
-
-        String methodName = getGetterMethodName(dataType);
-        Object value = invokeReflection(sysObject, methodName, new Class<?>[]{String.class}, attrName);
+        // getId returns an IDfId whose text can lose the leading zeros, so ids are read as text
+        String methodName = dataType == DM_ID ? "getString" : DfcTypeUtils.getterName(dataType);
+        Object value = DfcReflection.invoke(sysObject, methodName, STRING_PARAM, attrName);
 
         // Convert IDfTime to string for JSON serialization
-        if (value != null && dataType == 4) { // TIME
+        if (value != null && dataType == DM_TIME) {
             value = value.toString();
         }
 
@@ -725,31 +585,16 @@ public class ObjectServiceImpl implements ObjectService {
     }
 
     private Object extractRepeatingAttributeValue(Object sysObject, String attrName, int dataType) throws Exception {
-        int count = (Integer) invokeReflection(sysObject, "getValueCount", new Class<?>[]{String.class}, attrName);
-        if (count == 0) {
-            return new ArrayList<>();
-        }
-
+        int count = (Integer) DfcReflection.invoke(sysObject, "getValueCount", STRING_PARAM, attrName);
         List<Object> values = new ArrayList<>();
 
-        // For ID attributes, use getRepeatingString to get consistent string representation
-        // getRepeatingId returns IDfId which may lose leading zeros when serialized
-        if (dataType == 3) { // DM_ID type
-            for (int i = 0; i < count; i++) {
-                Object value = invokeReflection(sysObject, "getRepeatingString",
-                        new Class<?>[]{String.class, int.class}, attrName, i);
-                values.add(value);
-            }
-            return values;
-        }
-
-        String methodName = getRepeatingGetterMethodName(dataType);
+        // getRepeatingId returns an IDfId whose text can lose the leading zeros, so ids are read as text
+        String methodName = dataType == DM_ID ? "getRepeatingString" : DfcTypeUtils.repeatingGetterName(dataType);
 
         for (int i = 0; i < count; i++) {
-            Object value = invokeReflection(sysObject, methodName,
-                    new Class<?>[]{String.class, int.class}, attrName, i);
+            Object value = DfcReflection.invoke(sysObject, methodName, STRING_INT_PARAMS, attrName, i);
             // Convert IDfTime to string for JSON serialization
-            if (value != null && dataType == 4) { // TIME
+            if (value != null && dataType == DM_TIME) {
                 value = value.toString();
             }
             values.add(value);
@@ -757,40 +602,14 @@ public class ObjectServiceImpl implements ObjectService {
         return values;
     }
 
-    private String getGetterMethodName(int dataType) {
-        // DFC data type constants: DM_BOOLEAN=0, DM_INTEGER=1, DM_STRING=2, DM_ID=3, DM_TIME=4, DM_DOUBLE=5
-        return switch (dataType) {
-            case 0 -> "getBoolean";   // DM_BOOLEAN
-            case 1 -> "getInt";       // DM_INTEGER
-            case 2 -> "getString";    // DM_STRING
-            case 3 -> "getId";        // DM_ID
-            case 4 -> "getTime";      // DM_TIME
-            case 5 -> "getDouble";    // DM_DOUBLE
-            default -> "getString";
-        };
-    }
-
-    private String getRepeatingGetterMethodName(int dataType) {
-        // DFC data type constants: DM_BOOLEAN=0, DM_INTEGER=1, DM_STRING=2, DM_ID=3, DM_TIME=4, DM_DOUBLE=5
-        return switch (dataType) {
-            case 0 -> "getRepeatingBoolean";   // DM_BOOLEAN
-            case 1 -> "getRepeatingInt";       // DM_INTEGER
-            case 2 -> "getRepeatingString";    // DM_STRING
-            case 3 -> "getRepeatingId";        // DM_ID
-            case 4 -> "getRepeatingTime";      // DM_TIME
-            case 5 -> "getRepeatingDouble";    // DM_DOUBLE
-            default -> "getRepeatingString";
-        };
-    }
-
     private void setObjectAttribute(Object sysObject, String attrName, Object value,
                                     Map<String, Integer> dataTypes) throws Exception {
-        boolean isRepeating = (Boolean) invokeReflection(sysObject, "isAttrRepeating",
-                new Class<?>[]{String.class}, attrName);
+        boolean isRepeating = (Boolean) DfcReflection.invoke(sysObject, "isAttrRepeating",
+                STRING_PARAM, attrName);
         Integer dataType = dataTypes.get(attrName);
         if (dataType == null) {
-            dataType = (Integer) invokeReflection(sysObject, "getAttrDataType",
-                    new Class<?>[]{String.class}, attrName);
+            dataType = (Integer) DfcReflection.invoke(sysObject, "getAttrDataType",
+                    STRING_PARAM, attrName);
         }
 
         if (isRepeating) {
@@ -801,13 +620,12 @@ public class ObjectServiceImpl implements ObjectService {
     }
 
     private void setScalarAttribute(Object sysObject, String attrName, Object value, int dataType) throws Exception {
-        Method setStringMethod = sysObject.getClass().getMethod("setString", String.class, String.class);
-        setStringMethod.invoke(sysObject, attrName, attributeText(attrName, value, dataType));
+        DfcReflection.invoke(sysObject, "setString", new Class<?>[]{String.class, String.class},
+                attrName, attributeText(attrName, value, dataType));
     }
 
     private void setRepeatingAttribute(Object sysObject, String attrName, Object value, int dataType) throws Exception {
-        Method removeAllMethod = sysObject.getClass().getMethod("removeAll", String.class);
-        removeAllMethod.invoke(sysObject, attrName);
+        DfcReflection.invoke(sysObject, "removeAll", STRING_PARAM, attrName);
 
         if (value == null) {
             return;
@@ -823,8 +641,8 @@ public class ObjectServiceImpl implements ObjectService {
 
     private void setRepeatingValueAtIndex(Object sysObject, String attrName, int index, Object value,
                                           int dataType) throws Exception {
-        Method method = sysObject.getClass().getMethod("setRepeatingString", String.class, int.class, String.class);
-        method.invoke(sysObject, attrName, index, attributeText(attrName, value, dataType));
+        DfcReflection.invoke(sysObject, "setRepeatingString", new Class<?>[]{String.class, int.class, String.class},
+                attrName, index, attributeText(attrName, value, dataType));
     }
 
     // setString parses the text for every data type, but "" fails on int and double attributes.
@@ -847,7 +665,7 @@ public class ObjectServiceImpl implements ObjectService {
 
     private void revertAfterFailure(Object sysObject, String objectId) {
         try {
-            sysObject.getClass().getMethod("revert").invoke(sysObject);
+            DfcReflection.invoke(sysObject, "revert");
         } catch (Exception e) {
             log.warn("Could not revert object {} after a failed update: {}",
                     objectId, DfcExceptionUtils.unwrap(e).getMessage());
@@ -855,19 +673,17 @@ public class ObjectServiceImpl implements ObjectService {
     }
 
     private TypeInfo extractTypeInfo(Object type) throws Exception {
-        String name = (String) invokeReflection(type, "getName");
-        String superName = (String) invokeReflection(type, "getSuperName");
-        // DFC doesn't expose isTypeInternal; determine from naming convention
-        boolean isSystem = name.startsWith("dm_") || name.startsWith("dmi_");
-        int attrCount = (Integer) invokeReflection(type, "getTypeAttrCount");
+        String name = (String) DfcReflection.invoke(type, "getName");
+        String superName = (String) DfcReflection.invoke(type, "getSuperName");
+        int attrCount = (Integer) DfcReflection.invoke(type, "getTypeAttrCount");
 
         // Determine the number of inherited attributes by getting the super type's attribute count.
         // All attributes at indices 0 to (inheritedAttrCount-1) are inherited from the super type.
         int inheritedAttrCount = 0;
         try {
-            Object superType = invokeReflection(type, "getSuperType");
+            Object superType = DfcReflection.invoke(type, "getSuperType");
             if (superType != null) {
-                inheritedAttrCount = (Integer) invokeReflection(superType, "getTypeAttrCount");
+                inheritedAttrCount = (Integer) DfcReflection.invoke(superType, "getTypeAttrCount");
             }
         } catch (Exception e) {
             log.debug("Could not get super type attr count for type {}, defaulting to 0: {}", name, e.getMessage());
@@ -875,7 +691,7 @@ public class ObjectServiceImpl implements ObjectService {
 
         List<TypeInfo.AttributeInfo> attributes = new ArrayList<>();
         for (int i = 0; i < attrCount; i++) {
-            Object attr = invokeReflection(type, "getTypeAttr", new Class<?>[]{int.class}, i);
+            Object attr = DfcReflection.invoke(type, "getTypeAttr", INT_PARAM, i);
             boolean isInherited = i < inheritedAttrCount;
             attributes.add(extractAttributeInfo(attr, isInherited));
         }
@@ -883,17 +699,22 @@ public class ObjectServiceImpl implements ObjectService {
         return TypeInfo.builder()
                 .name(name)
                 .superType(superName)
-                .systemType(isSystem)
+                .systemType(isSystemType(name))
                 .attributes(attributes)
                 .build();
     }
 
+    // DFC doesn't expose isTypeInternal; determine from naming convention
+    private static boolean isSystemType(String typeName) {
+        return typeName.startsWith("dm_") || typeName.startsWith("dmi_");
+    }
+
     private TypeInfo.AttributeInfo extractAttributeInfo(Object attr, boolean isInherited) throws Exception {
         return TypeInfo.AttributeInfo.builder()
-                .name((String) invokeReflection(attr, "getName"))
-                .dataType(DfcTypeUtils.dataTypeToString((Integer) invokeReflection(attr, "getDataType")))
-                .length((Integer) invokeReflection(attr, "getLength"))
-                .repeating((Boolean) invokeReflection(attr, "isRepeating"))
+                .name((String) DfcReflection.invoke(attr, "getName"))
+                .dataType(DfcTypeUtils.dataTypeToString((Integer) DfcReflection.invoke(attr, "getDataType")))
+                .length((Integer) DfcReflection.invoke(attr, "getLength"))
+                .repeating((Boolean) DfcReflection.invoke(attr, "isRepeating"))
                 .inherited(isInherited)
                 .build();
     }
@@ -987,7 +808,7 @@ public class ObjectServiceImpl implements ObjectService {
             return result.toString();
         } finally {
             if (collectionClass != null && collectionClass.isInstance(result)) {
-                collectionClass.getMethod("close").invoke(result);
+                DfcReflection.invoke(collectionClass, result, "close", NO_PARAMS);
             }
         }
     }
@@ -1014,7 +835,7 @@ public class ObjectServiceImpl implements ObjectService {
             if (DFC_TIME_IFACE.equals(paramType)) {
                 converted[i] = toDfTime(value);
             } else if (DFC_ID_IFACE.equals(paramType)) {
-                converted[i] = Class.forName(DFC_ID_CLASS).getConstructor(String.class).newInstance(value);
+                converted[i] = DfcReflection.newInstance(DFC_ID_CLASS, STRING_PARAM, value);
             }
         }
         return converted;
@@ -1022,74 +843,10 @@ public class ObjectServiceImpl implements ObjectService {
 
     // DfTime(String) does not throw on unparseable text; it returns an invalid time that saves as nulldate.
     private Object toDfTime(String value) throws Exception {
-        Object time = Class.forName(DFC_TIME_CLASS).getConstructor(String.class).newInstance(value);
-        if (!(Boolean) time.getClass().getMethod("isValid").invoke(time)) {
+        Object time = DfcReflection.newInstance(DFC_TIME_CLASS, STRING_PARAM, value);
+        if (!(Boolean) DfcReflection.invoke(time, "isValid")) {
             throw new IllegalArgumentException("Invalid time value: " + value);
         }
         return time;
     }
-
-    /**
-     * Helper method to invoke a method via reflection, handling accessibility.
-     * DFC implementation classes are often proxies, so we search through the class,
-     * its interfaces, and superclasses to find what we need.
-     */
-    private Object invokeReflection(Object target, String methodName, Class<?>[] paramTypes, Object... args) throws Exception {
-        // First try using getMethod which searches the entire class hierarchy
-        try {
-            Method method = target.getClass().getMethod(methodName, paramTypes);
-            method.setAccessible(true);
-            return method.invoke(target, args);
-        } catch (NoSuchMethodException e) {
-            // Try getting all methods and finding a match
-            for (Method method : target.getClass().getMethods()) {
-                if (method.getName().equals(methodName) &&
-                    java.util.Arrays.equals(method.getParameterTypes(), paramTypes)) {
-                    method.setAccessible(true);
-                    return method.invoke(target, args);
-                }
-            }
-            // Try searching through all interfaces (DFC proxies implement interfaces)
-            for (Class<?> iface : getAllInterfaces(target.getClass())) {
-                try {
-                    Method method = iface.getMethod(methodName, paramTypes);
-                    method.setAccessible(true);
-                    return method.invoke(target, args);
-                } catch (NoSuchMethodException ignored) {
-                    // Try next interface
-                }
-            }
-            throw new NoSuchMethodException(methodName + " on " + target.getClass().getName());
-        }
-    }
-
-    /**
-     * Get all interfaces implemented by a class, including inherited ones.
-     */
-    private List<Class<?>> getAllInterfaces(Class<?> clazz) {
-        List<Class<?>> interfaces = new ArrayList<>();
-        while (clazz != null) {
-            for (Class<?> iface : clazz.getInterfaces()) {
-                if (!interfaces.contains(iface)) {
-                    interfaces.add(iface);
-                    // Add super-interfaces too
-                    for (Class<?> superIface : iface.getInterfaces()) {
-                        if (!interfaces.contains(superIface)) {
-                            interfaces.add(superIface);
-                        }
-                    }
-                }
-            }
-            clazz = clazz.getSuperclass();
-        }
-        return interfaces;
-    }
-
-    /**
-     * Helper method to invoke a no-arg method via reflection.
-     */
-    private Object invokeReflection(Object target, String methodName) throws Exception {
-        return invokeReflection(target, methodName, new Class<?>[0]);
-    }
-
 }

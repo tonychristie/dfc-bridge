@@ -6,12 +6,12 @@ import com.spirecentral.dfcbridge.exception.DfcBridgeException;
 import com.spirecentral.dfcbridge.service.DfcSessionService;
 import com.spirecentral.dfcbridge.service.DmApiService;
 import com.spirecentral.dfcbridge.util.DfcExceptionUtils;
+import com.spirecentral.dfcbridge.util.DfcReflection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
-import java.lang.reflect.Method;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -123,14 +123,8 @@ public class DmApiServiceImpl implements DmApiService {
 
         log.debug("invokeApiGet: method='{}', args='{}'", method, args);
 
-        Class<?> sessionInterface = Class.forName(DFC_SESSION_IFACE);
-        log.debug("Looking up apiGet on interface: {}", sessionInterface.getName());
-
-        Method apiGetMethod = sessionInterface.getMethod("apiGet", String.class, String.class);
-        log.debug("Found apiGet method: {} (declared in {})",
-                apiGetMethod, apiGetMethod.getDeclaringClass().getName());
-
-        String result = (String) apiGetMethod.invoke(dfSession, method, args);
+        String result = (String) DfcReflection.invoke(DFC_SESSION_IFACE, dfSession, "apiGet",
+                new Class<?>[]{String.class, String.class}, method, args);
         log.debug("apiGet returned: '{}'", result);
         return result;
     }
@@ -149,14 +143,8 @@ public class DmApiServiceImpl implements DmApiService {
 
         log.debug("invokeApiExec: method='{}', args='{}'", method, args);
 
-        Class<?> sessionInterface = Class.forName(DFC_SESSION_IFACE);
-        log.debug("Looking up apiExec on interface: {}", sessionInterface.getName());
-
-        Method apiExecMethod = sessionInterface.getMethod("apiExec", String.class, String.class);
-        log.debug("Found apiExec method: {} (declared in {})",
-                apiExecMethod, apiExecMethod.getDeclaringClass().getName());
-
-        boolean result = (Boolean) apiExecMethod.invoke(dfSession, method, args);
+        boolean result = (Boolean) DfcReflection.invoke(DFC_SESSION_IFACE, dfSession, "apiExec",
+                new Class<?>[]{String.class, String.class}, method, args);
         log.debug("apiExec returned: {}", result);
         return result;
     }
@@ -182,14 +170,8 @@ public class DmApiServiceImpl implements DmApiService {
 
         log.debug("invokeApiSet: method='{}', args='{}', value='{}'", method, args, value);
 
-        Class<?> sessionInterface = Class.forName(DFC_SESSION_IFACE);
-        log.debug("Looking up apiSet on interface: {}", sessionInterface.getName());
-
-        Method apiSetMethod = sessionInterface.getMethod("apiSet", String.class, String.class, String.class);
-        log.debug("Found apiSet method: {} (declared in {})",
-                apiSetMethod, apiSetMethod.getDeclaringClass().getName());
-
-        boolean result = (Boolean) apiSetMethod.invoke(dfSession, method, args, value);
+        boolean result = (Boolean) DfcReflection.invoke(DFC_SESSION_IFACE, dfSession, "apiSet",
+                new Class<?>[]{String.class, String.class, String.class}, method, args, value);
         log.debug("apiSet returned: {}", result);
         return result;
     }

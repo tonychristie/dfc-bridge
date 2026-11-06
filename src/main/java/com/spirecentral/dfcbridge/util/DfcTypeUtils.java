@@ -28,6 +28,40 @@ public final class DfcTypeUtils {
     }
 
     /**
+     * Returns the name of the DFC getter that reads a single value of a data type.
+     *
+     * @param dataType the DFC data type constant
+     * @return the getter name, getString for an unknown type
+     */
+    public static String getterName(int dataType) {
+        return switch (dataType) {
+            case 0 -> "getBoolean";
+            case 1 -> "getInt";
+            case 3 -> "getId";
+            case 4 -> "getTime";
+            case 5 -> "getDouble";
+            default -> "getString";
+        };
+    }
+
+    /**
+     * Returns the name of the DFC getter that reads one value of a repeating attribute of a data type.
+     *
+     * @param dataType the DFC data type constant
+     * @return the getter name, getRepeatingString for an unknown type
+     */
+    public static String repeatingGetterName(int dataType) {
+        return switch (dataType) {
+            case 0 -> "getRepeatingBoolean";
+            case 1 -> "getRepeatingInt";
+            case 3 -> "getRepeatingId";
+            case 4 -> "getRepeatingTime";
+            case 5 -> "getRepeatingDouble";
+            default -> "getRepeatingString";
+        };
+    }
+
+    /**
      * Converts a DFC permission level to its label.
      *
      * @param permit the DFC permission level
@@ -57,5 +91,21 @@ public final class DfcTypeUtils {
             return null;
         }
         return input.replace("'", "''");
+    }
+
+    /**
+     * Converts a name pattern to the text of a DQL LIKE clause that uses ESCAPE '\'.
+     * Only * is a wildcard; _ and % match themselves.
+     *
+     * @param pattern the name pattern
+     * @return the LIKE text, safe for DQL
+     */
+    public static String toLikePattern(String pattern) {
+        // \ is escaped first so that a \ in the pattern cannot escape the next character
+        return sanitizeDqlString(pattern)
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_")
+                .replace("*", "%");
     }
 }

@@ -6,12 +6,13 @@ import com.spirecentral.dfcbridge.model.QueryResult;
 import com.spirecentral.dfcbridge.service.DfcSessionService;
 import com.spirecentral.dfcbridge.service.DqlService;
 import com.spirecentral.dfcbridge.util.DfcExceptionUtils;
+import com.spirecentral.dfcbridge.util.DfcQuery;
+import com.spirecentral.dfcbridge.util.DfcReflection;
 import com.spirecentral.dfcbridge.util.DfcTypeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -27,10 +28,10 @@ public class DqlServiceImpl implements DqlService {
 
     private static final Logger log = LoggerFactory.getLogger(DqlServiceImpl.class);
 
-    private static final String DFC_QUERY_CLASS = "com.documentum.fc.client.DfQuery";
-    private static final String DFC_QUERY_IFACE = "com.documentum.fc.client.IDfQuery";
-    private static final String DFC_COLLECTION_IFACE = "com.documentum.fc.client.IDfCollection";
-    private static final String DFC_TYPED_OBJECT_IFACE = "com.documentum.fc.client.IDfTypedObject";
+    private static final int DM_TIME = 4;
+
+    private static final Class<?>[] STRING_PARAM = {String.class};
+    private static final Class<?>[] STRING_INT_PARAMS = {String.class, int.class};
 
     private final DfcSessionService sessionService;
 
@@ -45,78 +46,40 @@ public class DqlServiceImpl implements DqlService {
 
         return sessionService.withSession(request.getSessionId(), dfSession -> {
             try {
-                // Create query object
-                Class<?> dfQueryClass = Class.forName(DFC_QUERY_CLASS);
-                Object query = dfQueryClass.getDeclaredConstructor().newInstance();
-
-                // Set DQL
-                Method setDqlMethod = dfQueryClass.getMethod("setDQL", String.class);
-                setDqlMethod.invoke(query, request.getQuery());
-
-                // Execute query
-                Class<?> sessionClass = dfSession.getClass();
-                Class<?> queryInterface = Class.forName(DFC_QUERY_IFACE);
-
-                // IDfQuery.DF_READ_QUERY = 0
-                Method executeMethod = queryInterface.getMethod("execute",
-                        Class.forName("com.documentum.fc.client.IDfSession"), int.class);
-                Object collection = executeMethod.invoke(query, dfSession, 0);
-
-                // Process results
-                List<QueryResult.ColumnInfo> columns = new ArrayList<>();
+                List<Column> columns = new ArrayList<>();
                 List<Map<String, Object>> rows = new ArrayList<>();
-                boolean columnsExtracted = false;
-                int rowCount = 0;
-                int skipped = 0;
+                boolean[] hasMore = {false};
+                int[] skipped = {0};
 
-                Class<?> collectionClass = Class.forName(DFC_COLLECTION_IFACE);
-                Method nextMethod = collectionClass.getMethod("next");
-                Method closeMethod = collectionClass.getMethod("close");
-
-                try {
-                    while ((Boolean) nextMethod.invoke(collection)) {
-                        // Skip rows for pagination
-                        if (skipped < request.getStartRow()) {
-                            skipped++;
-                            continue;
-                        }
-
-                        // Extract columns on first row
-                        if (!columnsExtracted) {
-                            columns = extractColumns(collection);
-                            columnsExtracted = true;
-                        }
-
-                        // Check max rows
-                        if (rowCount >= request.getMaxRows()) {
-                            // There are more rows
-                            long executionTime = System.currentTimeMillis() - startTime;
-                            return QueryResult.builder()
-                                    .columns(columns)
-                                    .rows(rows)
-                                    .rowCount(rowCount)
-                                    .hasMore(true)
-                                    .executionTimeMs(executionTime)
-                                    .build();
-                        }
-
-                        // Extract row data
-                        Map<String, Object> row = extractRow(collection, columns);
-                        rows.add(row);
-                        rowCount++;
+                DfcQuery.forEachRow(dfSession, request.getQuery(), row -> {
+                    if (skipped[0] < request.getStartRow()) {
+                        skipped[0]++;
+                        return true;
                     }
-                } finally {
-                    closeMethod.invoke(collection);
-                }
+                    if (columns.isEmpty()) {
+                        columns.addAll(extractColumns(row));
+                    }
+                    if (rows.size() >= request.getMaxRows()) {
+                        hasMore[0] = true;
+                        return false;
+                    }
+                    rows.add(extractRow(row, columns));
+                    return true;
+                });
 
                 long executionTime = System.currentTimeMillis() - startTime;
-                log.debug("Query returned {} rows in {}ms", rowCount, executionTime);
+                log.debug("Query returned {} rows in {}ms", rows.size(), executionTime);
+
+                List<QueryResult.ColumnInfo> columnInfos = new ArrayList<>();
+                for (Column column : columns) {
+                    columnInfos.add(column.info);
+                }
 
                 return QueryResult.builder()
-                        .columns(columns)
+                        .columns(columnInfos)
                         .rows(rows)
-                        .rowCount(rowCount)
-                        .hasMore(false)
+                        .rowCount(rows.size())
+                        .hasMore(hasMore[0])
                         .executionTimeMs(executionTime)
                         .build();
 
@@ -126,111 +89,63 @@ public class DqlServiceImpl implements DqlService {
         });
     }
 
-    private List<QueryResult.ColumnInfo> extractColumns(Object collection) throws Exception {
-        List<QueryResult.ColumnInfo> columns = new ArrayList<>();
-
-        Class<?> typedObjectClass = Class.forName(DFC_TYPED_OBJECT_IFACE);
-        Method getAttrCountMethod = typedObjectClass.getMethod("getAttrCount");
-        Method getAttrMethod = typedObjectClass.getMethod("getAttr", int.class);
-
-        int attrCount = (Integer) getAttrCountMethod.invoke(collection);
+    private List<Column> extractColumns(Object collection) throws Exception {
+        List<Column> columns = new ArrayList<>();
+        int attrCount = (Integer) DfcReflection.invoke(collection, "getAttrCount");
 
         for (int i = 0; i < attrCount; i++) {
-            Object attr = getAttrMethod.invoke(collection, i);
+            Object attr = DfcReflection.invoke(collection, "getAttr", new Class<?>[]{int.class}, i);
+            int dataType = (Integer) DfcReflection.invoke(attr, "getDataType");
+            boolean repeating = (Boolean) DfcReflection.invoke(attr, "isRepeating");
 
-            Method getNameMethod = attr.getClass().getMethod("getName");
-            Method getDataTypeMethod = attr.getClass().getMethod("getDataType");
-            Method getLengthMethod = attr.getClass().getMethod("getLength");
-            Method isRepeatingMethod = attr.getClass().getMethod("isRepeating");
-
-            String name = (String) getNameMethod.invoke(attr);
-            int dataType = (Integer) getDataTypeMethod.invoke(attr);
-            int length = (Integer) getLengthMethod.invoke(attr);
-            boolean repeating = (Boolean) isRepeatingMethod.invoke(attr);
-
-            columns.add(QueryResult.ColumnInfo.builder()
-                    .name(name)
+            QueryResult.ColumnInfo info = QueryResult.ColumnInfo.builder()
+                    .name((String) DfcReflection.invoke(attr, "getName"))
                     .type(DfcTypeUtils.dataTypeToString(dataType))
-                    .length(length)
+                    .length((Integer) DfcReflection.invoke(attr, "getLength"))
                     .repeating(repeating)
-                    .build());
+                    .build();
+            String getter = repeating ? DfcTypeUtils.repeatingGetterName(dataType) : DfcTypeUtils.getterName(dataType);
+            columns.add(new Column(info, getter, dataType == DM_TIME));
         }
 
         return columns;
     }
 
-    private Map<String, Object> extractRow(Object collection, List<QueryResult.ColumnInfo> columns)
-            throws Exception {
+    private Map<String, Object> extractRow(Object collection, List<Column> columns) throws Exception {
         Map<String, Object> row = new HashMap<>();
-
-        Class<?> typedObjectClass = Class.forName(DFC_TYPED_OBJECT_IFACE);
-
-        for (QueryResult.ColumnInfo col : columns) {
+        for (Column column : columns) {
+            String name = column.info.getName();
             Object value;
-            if (col.isRepeating()) {
-                value = extractRepeatingValue(collection, typedObjectClass, col);
+            if (column.info.isRepeating()) {
+                List<Object> values = new ArrayList<>();
+                int count = DfcQuery.getValueCount(collection, name);
+                for (int i = 0; i < count; i++) {
+                    values.add(column.toResult(
+                            DfcReflection.invoke(collection, column.getter, STRING_INT_PARAMS, name, i)));
+                }
+                value = values;
             } else {
-                value = extractSingleValue(collection, typedObjectClass, col);
+                value = column.toResult(DfcReflection.invoke(collection, column.getter, STRING_PARAM, name));
             }
-            row.put(col.getName(), value);
+            row.put(name, value);
         }
-
         return row;
     }
 
-    private Object extractSingleValue(Object collection, Class<?> typedObjectClass,
-                                       QueryResult.ColumnInfo col) throws Exception {
-        String methodName = getGetterMethodName(col.getType());
-        Method getValueMethod = typedObjectClass.getMethod(methodName, String.class);
-        Object value = getValueMethod.invoke(collection, col.getName());
+    private static final class Column {
+        private final QueryResult.ColumnInfo info;
+        private final String getter;
+        private final boolean time;
 
-        // Convert IDfTime to string using default toString()
-        if ("TIME".equals(col.getType()) && value != null) {
-            value = value.toString();
+        private Column(QueryResult.ColumnInfo info, String getter, boolean time) {
+            this.info = info;
+            this.getter = getter;
+            this.time = time;
         }
 
-        return value;
-    }
-
-    private Object extractRepeatingValue(Object collection, Class<?> typedObjectClass,
-                                          QueryResult.ColumnInfo col) throws Exception {
-        List<Object> values = new ArrayList<>();
-        Method getValueCountMethod = typedObjectClass.getMethod("getValueCount", String.class);
-        int count = (Integer) getValueCountMethod.invoke(collection, col.getName());
-
-        String methodName = getRepeatingGetterMethodName(col.getType());
-        Method getRepeatingMethod = typedObjectClass.getMethod(methodName, String.class, int.class);
-
-        for (int i = 0; i < count; i++) {
-            Object value = getRepeatingMethod.invoke(collection, col.getName(), i);
-            // Convert IDfTime to string using default toString()
-            if ("TIME".equals(col.getType()) && value != null) {
-                value = value.toString();
-            }
-            values.add(value);
+        // IDfTime is returned as its default text
+        private Object toResult(Object value) {
+            return time && value != null ? value.toString() : value;
         }
-        return values;
-    }
-
-    private String getGetterMethodName(String dataType) {
-        return switch (dataType) {
-            case "BOOLEAN" -> "getBoolean";
-            case "INTEGER" -> "getInt";
-            case "DOUBLE" -> "getDouble";
-            case "TIME" -> "getTime";
-            case "ID" -> "getId";
-            default -> "getString";
-        };
-    }
-
-    private String getRepeatingGetterMethodName(String dataType) {
-        return switch (dataType) {
-            case "BOOLEAN" -> "getRepeatingBoolean";
-            case "INTEGER" -> "getRepeatingInt";
-            case "DOUBLE" -> "getRepeatingDouble";
-            case "TIME" -> "getRepeatingTime";
-            case "ID" -> "getRepeatingId";
-            default -> "getRepeatingString";
-        };
     }
 }

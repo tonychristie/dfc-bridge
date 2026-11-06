@@ -1,6 +1,7 @@
 package com.spirecentral.dfcbridge.service.impl;
 
 import com.documentum.fc.client.DfIdNotFoundException;
+import com.documentum.fc.client.DfQuery;
 import com.documentum.fc.client.IDfCollection;
 import com.documentum.fc.common.DfException;
 import com.documentum.fc.common.DfId;
@@ -14,8 +15,11 @@ import com.spirecentral.dfcbridge.exception.DfcBridgeException;
 import com.spirecentral.dfcbridge.exception.ObjectNotFoundException;
 import com.spirecentral.dfcbridge.model.AttributeValue;
 import com.spirecentral.dfcbridge.model.ObjectInfo;
+import com.spirecentral.dfcbridge.model.TypeInfo;
 import com.spirecentral.dfcbridge.service.DfcSessionService;
 import com.spirecentral.dfcbridge.util.DfcExceptionUtils;
+import com.spirecentral.dfcbridge.util.RowCollection;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -48,6 +52,11 @@ class ObjectServiceImplTest {
     @BeforeEach
     void setUp() {
         objectService = new ObjectServiceImpl(sessionService);
+    }
+
+    @AfterEach
+    void tearDown() {
+        DfQuery.reset(null);
     }
 
     private void stubSession(Object dfSession) {
@@ -765,6 +774,99 @@ class ObjectServiceImplTest {
                 .build();
     }
 
+    // ========== folder listing tests ==========
+
+    private static final String FOLDER_QUERY = "SELECT r_object_id, object_name, r_object_type, a_content_type "
+            + "FROM dm_sysobject WHERE FOLDER(ID('0b00000180000001')) ORDER BY object_name";
+
+    @Test
+    void listFolderContentsById_runsOneQueryOnFolderId() {
+        stubSessionReturning(folder());
+        DfQuery.reset(dql -> folderRows());
+
+        List<ObjectInfo> contents = objectService.listFolderContentsById("test-session", "0b00000180000001");
+
+        assertEquals(List.of(FOLDER_QUERY), DfQuery.executed);
+        assertFolderRows(contents);
+    }
+
+    @Test
+    void listFolderContents_runsOneQueryOnFolderId() {
+        MockDfSession session = new MockDfSession();
+        session.addFolder("/Temp/Reports", folder());
+        stubSession(session);
+        DfQuery.reset(dql -> folderRows());
+
+        List<ObjectInfo> contents = objectService.listFolderContents("test-session", "/Temp/Reports");
+
+        assertEquals(List.of(FOLDER_QUERY), DfQuery.executed);
+        assertFolderRows(contents);
+    }
+
+    @Test
+    void listFolderContents_noFolderAtPath_throwsObjectNotFound() {
+        stubSession(new MockDfSession());
+
+        assertThrows(ObjectNotFoundException.class,
+                () -> objectService.listFolderContents("test-session", "/No/Such/Folder"));
+    }
+
+    private MockDfFolder folder() {
+        return new MockDfFolder("0b00000180000001");
+    }
+
+    private RowCollection folderRows() {
+        return new RowCollection(
+                Map.of("r_object_id", "0b00000180000002", "object_name", "Archive",
+                        "r_object_type", "dm_folder", "a_content_type", ""),
+                Map.of("r_object_id", "0900000180000003", "object_name", "Report",
+                        "r_object_type", "dm_document", "a_content_type", "pdf"));
+    }
+
+    private void assertFolderRows(List<ObjectInfo> contents) {
+        assertEquals(2, contents.size());
+        ObjectInfo document = contents.get(1);
+        assertEquals("0900000180000003", document.getObjectId());
+        assertEquals("dm_document", document.getType());
+        assertEquals("Report", document.getName());
+        assertEquals(Map.of("a_content_type", AttributeValue.single("string", "pdf")), document.getAttributes());
+        assertNull(document.getPermissionLevel());
+        assertEquals("Archive", contents.get(0).getName());
+    }
+
+    // ========== type list tests ==========
+
+    @Test
+    void listTypes_mapsNameAndSuperName() {
+        stubSession(new MockDfSession());
+        DfQuery.reset(dql -> new RowCollection(
+                Map.of("name", "dm_document", "super_name", "dm_sysobject"),
+                Map.of("name", "dmi_queue_item", "super_name", ""),
+                Map.of("name", "my_contract", "super_name", "dm_document")));
+
+        List<TypeInfo> types = objectService.listTypes("test-session", null);
+
+        assertEquals(List.of("SELECT name, super_name FROM dm_type ORDER BY name"), DfQuery.executed);
+        assertEquals("dm_document", types.get(0).getName());
+        assertEquals("dm_sysobject", types.get(0).getSuperType());
+        assertTrue(types.get(0).isSystemType());
+        assertEquals("", types.get(1).getSuperType());
+        assertTrue(types.get(1).isSystemType());
+        assertFalse(types.get(2).isSystemType());
+        assertNull(types.get(2).getAttributes());
+    }
+
+    @Test
+    void listTypes_dmPattern_escapesUnderscore() {
+        stubSession(new MockDfSession());
+        DfQuery.reset(dql -> new RowCollection());
+
+        objectService.listTypes("test-session", "dm_*");
+
+        assertEquals(List.of("SELECT name, super_name FROM dm_type WHERE name LIKE 'dm\\_%' ESCAPE '\\' ORDER BY name"),
+                DfQuery.executed);
+    }
+
     // ========== missing object tests ==========
 
     @Test
@@ -812,9 +914,14 @@ class ObjectServiceImplTest {
     public static class MockDfSession implements com.documentum.fc.client.IDfSession {
         private Object objectToReturn;
         private DfException getObjectException;
+        private final Map<String, Object> folders = new HashMap<>();
 
         public void setObjectToReturn(Object obj) {
             this.objectToReturn = obj;
+        }
+
+        public void addFolder(String path, Object folder) {
+            folders.put(path, folder);
         }
 
         public void setGetObjectException(DfException e) {
@@ -831,6 +938,11 @@ class ObjectServiceImplTest {
         @Override
         public Object getType(String typeName) {
             return null;
+        }
+
+        @Override
+        public Object getFolderByPath(String folderPath) {
+            return folders.get(folderPath);
         }
 
         @Override
@@ -1390,6 +1502,18 @@ class ObjectServiceImplTest {
         }
     }
 
+    public static class MockDfFolder {
+        private final String objectId;
+
+        public MockDfFolder(String objectId) {
+            this.objectId = objectId;
+        }
+
+        public String getString(String attrName) {
+            return "r_object_id".equals(attrName) ? objectId : null;
+        }
+    }
+
     /**
      * Mock target for API calls, recording which method ran.
      */
@@ -1434,6 +1558,11 @@ class ObjectServiceImplTest {
 
     public static class MockCollection implements IDfCollection {
         private boolean closed;
+
+        @Override
+        public boolean next() {
+            return false;
+        }
 
         @Override
         public void close() {
