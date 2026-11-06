@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -57,7 +58,8 @@ public class DfcSessionServiceImpl implements DfcSessionService {
 
         // Validate DFC-required fields
         if (request.getDocbroker() == null || request.getDocbroker().isBlank()) {
-            throw new ConnectionException("Docbroker host is required for DFC backend connections");
+            throw new ConnectionException("Docbroker host is required for DFC backend connections",
+                    HttpStatus.BAD_REQUEST);
         }
 
         log.info("Connecting to repository {} via {}:{}",
@@ -132,7 +134,7 @@ public class DfcSessionServiceImpl implements DfcSessionService {
 
         } catch (ClassNotFoundException e) {
             throw new ConnectionException("DFC libraries not found on classpath. " +
-                    "Ensure DFC is properly installed and configured.", e);
+                    "Ensure DFC is properly installed and configured.", HttpStatus.SERVICE_UNAVAILABLE);
         } catch (Exception e) {
             throw new ConnectionException("Failed to connect: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
@@ -170,13 +172,7 @@ public class DfcSessionServiceImpl implements DfcSessionService {
         }
         holder.lock.lock();
         try {
-            if (holder.released) {
-                return false;
-            }
-            return (Boolean) invokeMethod(holder.dfSession, "isConnected");
-        } catch (Exception e) {
-            log.warn("Error checking session validity: {}", e.getMessage());
-            return false;
+            return !holder.released && isDfcSessionConnected(holder);
         } finally {
             holder.lock.unlock();
         }
@@ -200,6 +196,14 @@ public class DfcSessionServiceImpl implements DfcSessionService {
         try {
             // disconnect or cleanup may have released the session while this request waited for the lock
             if (holder.released) {
+                throw new SessionNotFoundException(sessionId);
+            }
+            // a released DFC session handle fails every call, for example after an /api disconnect
+            if (!isDfcSessionConnected(holder)) {
+                sessions.remove(sessionId, holder);
+                holder.released = true;
+                releaseDfcSession(holder);
+                log.info("Session {} removed: DFC session is no longer connected", sessionId);
                 throw new SessionNotFoundException(sessionId);
             }
             holder.sessionInfo.setLastActivity(Instant.now());
@@ -235,6 +239,15 @@ public class DfcSessionServiceImpl implements DfcSessionService {
                 holder.lock.unlock();
             }
         });
+    }
+
+    private boolean isDfcSessionConnected(SessionHolder holder) {
+        try {
+            return (Boolean) invokeMethod(holder.dfSession, "isConnected");
+        } catch (Exception e) {
+            log.warn("Error checking session validity: {}", e.getMessage());
+            return false;
+        }
     }
 
     /**

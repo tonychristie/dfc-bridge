@@ -1,5 +1,6 @@
 package com.documentum.fc.client;
 
+import com.documentum.fc.common.DfException;
 import com.documentum.fc.common.IDfId;
 
 /**
@@ -16,9 +17,17 @@ public interface IDfSession {
      * Get an object by its ID.
      *
      * @param objectId the object ID
-     * @return the persistent object, or null if not found
+     * @return the persistent object
+     * @throws DfException DfIdNotFoundException when no object has the id
      */
-    Object getObject(IDfId objectId);
+    Object getObject(IDfId objectId) throws DfException;
+
+    /**
+     * Check whether the session is connected.
+     *
+     * @return false once the session has been released
+     */
+    boolean isConnected();
 
     /**
      * Execute a dmAPI get command.

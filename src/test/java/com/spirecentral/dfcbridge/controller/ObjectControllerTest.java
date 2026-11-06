@@ -1,10 +1,13 @@
 package com.spirecentral.dfcbridge.controller;
 
+import com.documentum.fc.client.DfAuthenticationException;
+import com.documentum.fc.common.DfException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.spirecentral.dfcbridge.dto.ApiRequest;
 import com.spirecentral.dfcbridge.dto.ApiResponse;
 import com.spirecentral.dfcbridge.dto.DmApiRequest;
 import com.spirecentral.dfcbridge.dto.UpdateObjectRequest;
+import com.spirecentral.dfcbridge.exception.DfcBridgeException;
 import com.spirecentral.dfcbridge.exception.ObjectNotFoundException;
 import com.spirecentral.dfcbridge.exception.SessionNotFoundException;
 import com.spirecentral.dfcbridge.model.AttributeValue;
@@ -16,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -424,6 +428,54 @@ class ObjectControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resultType").value("String"));
+    }
+
+    // Tests for the error status
+
+    @Test
+    void testGetObject_AuthenticationCause_Returns401() throws Exception {
+        when(objectService.getObject("session-123", "0900000180000001"))
+                .thenThrow(new DfcBridgeException("OBJECT_ERROR", "Failed to get object: authentication failed",
+                        new DfAuthenticationException("DM_SESSION_E_AUTH_FAIL")));
+
+        mockMvc.perform(get("/api/v1/objects/0900000180000001")
+                        .param("sessionId", "session-123"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("OBJECT_ERROR"))
+                .andExpect(jsonPath("$.message").value("Failed to get object: authentication failed"));
+    }
+
+    @Test
+    void testDeleteObject_PermissionMessageId_Returns403() throws Exception {
+        doThrow(new DfcBridgeException("DELETE_ERROR", "Failed to delete object: DM_SYSOBJECT_E_NO_DELETE_ACCESS",
+                new DfException("DM_SYSOBJECT_E_NO_DELETE_ACCESS")))
+                .when(objectService).deleteObject("session-123", "0900000180000001", false);
+
+        mockMvc.perform(delete("/api/v1/objects/0900000180000001")
+                        .param("sessionId", "session-123"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("DELETE_ERROR"))
+                .andExpect(jsonPath("$.message").value("Failed to delete object: DM_SYSOBJECT_E_NO_DELETE_ACCESS"));
+    }
+
+    @Test
+    void testExecuteDmApi_InvalidApiType_Returns400() throws Exception {
+        DmApiRequest request = DmApiRequest.builder()
+                .sessionId("session-123")
+                .apiType("bogus")
+                .command("getservermap,session")
+                .build();
+
+        when(dmApiService.execute(any(DmApiRequest.class)))
+                .thenThrow(new DfcBridgeException("INVALID_API_TYPE", "Invalid API type: bogus",
+                        HttpStatus.BAD_REQUEST));
+
+        mockMvc.perform(post("/api/v1/dmapi")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_API_TYPE"))
+                .andExpect(jsonPath("$.message").value("Invalid API type: bogus"));
     }
 
     @Test
