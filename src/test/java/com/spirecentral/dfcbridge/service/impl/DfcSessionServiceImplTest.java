@@ -34,6 +34,7 @@ class DfcSessionServiceImplTest {
         sessionManager = mock(IDfSessionManager.class);
         dfSession = mock(IDfSession.class);
         when(sessionManager.getSession("TestRepo")).thenReturn(dfSession);
+        when(dfSession.isConnected()).thenReturn(true);
         DfClient.sessionManager = sessionManager;
 
         sessionService = new DfcSessionServiceImpl(mock(DfcAvailabilityService.class));
@@ -158,6 +159,26 @@ class DfcSessionServiceImplTest {
             return null;
         }));
         assertFalse(workRan.get());
+    }
+
+    @Test
+    void withSession_dfcSessionNotConnected_throwsSessionNotFoundAndRemovesTheSession() {
+        String sessionId = connect();
+        when(dfSession.isConnected()).thenReturn(false);
+        AtomicBoolean workRan = new AtomicBoolean(false);
+
+        assertThrows(SessionNotFoundException.class, () -> sessionService.withSession(sessionId, s -> {
+            workRan.set(true);
+            return null;
+        }));
+        assertThrows(SessionNotFoundException.class, () -> sessionService.withSession(sessionId, s -> {
+            workRan.set(true);
+            return null;
+        }));
+
+        assertFalse(workRan.get());
+        assertThrows(SessionNotFoundException.class, () -> sessionService.getSessionInfo(sessionId));
+        verify(sessionManager).release(dfSession);
     }
 
     private String connect() {

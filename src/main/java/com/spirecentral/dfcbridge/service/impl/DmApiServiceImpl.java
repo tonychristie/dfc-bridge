@@ -8,6 +8,7 @@ import com.spirecentral.dfcbridge.service.DmApiService;
 import com.spirecentral.dfcbridge.util.DfcExceptionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.lang.reflect.Method;
@@ -83,7 +84,8 @@ public class DmApiServiceImpl implements DmApiService {
                         break;
                     default:
                         throw new DfcBridgeException("INVALID_API_TYPE",
-                                "Invalid API type: " + apiType + ". Must be 'get', 'exec', or 'set'");
+                                "Invalid API type: " + apiType + ". Must be 'get', 'exec', or 'set'",
+                                HttpStatus.BAD_REQUEST);
                 }
 
                 long executionTime = System.currentTimeMillis() - startTime;
@@ -176,7 +178,8 @@ public class DmApiServiceImpl implements DmApiService {
         int lastComma = argsAndValue.lastIndexOf(',');
         if (lastComma == -1) {
             throw new DfcBridgeException("INVALID_SET_COMMAND",
-                    "Invalid apiSet command format. Expected: method,args,value (e.g., set,session,objectId,attrName,value)");
+                    "Invalid apiSet command format. Expected: method,args,value (e.g., set,session,objectId,attrName,value)",
+                    HttpStatus.BAD_REQUEST);
         }
 
         String args = argsAndValue.substring(0, lastComma);

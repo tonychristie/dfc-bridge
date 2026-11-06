@@ -17,6 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -108,9 +109,6 @@ public class ObjectServiceImpl implements ObjectService {
         return sessionService.withSession(sessionId, dfSession -> {
             try {
                 Object sysObject = getObjectById(dfSession, objectId);
-                if (sysObject == null) {
-                    throw new ObjectNotFoundException(objectId);
-                }
 
                 return extractObjectInfo(sysObject, objectId);
 
@@ -130,9 +128,6 @@ public class ObjectServiceImpl implements ObjectService {
         return sessionService.withSession(sessionId, dfSession -> {
             try {
                 Object sysObject = getObjectById(dfSession, objectId);
-                if (sysObject == null) {
-                    throw new ObjectNotFoundException(objectId);
-                }
 
                 // Set attributes
                 for (Map.Entry<String, Object> attr : request.getAttributes().entrySet()) {
@@ -191,9 +186,7 @@ public class ObjectServiceImpl implements ObjectService {
 
                         // Get brief info for each object
                         Object obj = getObjectById(dfSession, objectId);
-                        if (obj != null) {
-                            contents.add(extractObjectInfo(obj, objectId));
-                        }
+                        contents.add(extractObjectInfo(obj, objectId));
                     }
                 } finally {
                     closeMethod.invoke(collection);
@@ -304,9 +297,6 @@ public class ObjectServiceImpl implements ObjectService {
                 Object target;
                 if (request.getObjectId() != null) {
                     target = getObjectById(dfSession, request.getObjectId());
-                    if (target == null) {
-                        throw new ObjectNotFoundException(request.getObjectId());
-                    }
                 } else if (request.getTypeName() != null) {
                     Class<?> sessionClass = Class.forName(DFC_SESSION_IFACE);
                     Method getTypeMethod = sessionClass.getMethod("getType", String.class);
@@ -344,9 +334,6 @@ public class ObjectServiceImpl implements ObjectService {
 
             try {
                 Object folder = getObjectById(dfSession, folderId);
-                if (folder == null) {
-                    throw new ObjectNotFoundException("Folder not found: " + folderId);
-                }
 
                 // Get folder contents
                 Class<?> folderClass = Class.forName(DFC_FOLDER_IFACE);
@@ -366,9 +353,7 @@ public class ObjectServiceImpl implements ObjectService {
 
                         // Get brief info for each object
                         Object obj = getObjectById(dfSession, objectId);
-                        if (obj != null) {
-                            contents.add(extractObjectInfo(obj, objectId));
-                        }
+                        contents.add(extractObjectInfo(obj, objectId));
                     }
                 } finally {
                     closeMethod.invoke(collection);
@@ -392,9 +377,6 @@ public class ObjectServiceImpl implements ObjectService {
         return sessionService.withSession(sessionId, dfSession -> {
             try {
                 Object sysObject = getObjectById(dfSession, objectId);
-                if (sysObject == null) {
-                    throw new ObjectNotFoundException(objectId);
-                }
 
                 // Call checkout
                 Method checkoutMethod = sysObject.getClass().getMethod("checkout");
@@ -418,9 +400,6 @@ public class ObjectServiceImpl implements ObjectService {
         sessionService.withSession(sessionId, dfSession -> {
             try {
                 Object sysObject = getObjectById(dfSession, objectId);
-                if (sysObject == null) {
-                    throw new ObjectNotFoundException(objectId);
-                }
 
                 // Call cancelCheckout
                 Method cancelCheckoutMethod = sysObject.getClass().getMethod("cancelCheckout");
@@ -443,9 +422,6 @@ public class ObjectServiceImpl implements ObjectService {
         return sessionService.withSession(sessionId, dfSession -> {
             try {
                 Object sysObject = getObjectById(dfSession, objectId);
-                if (sysObject == null) {
-                    throw new ObjectNotFoundException(objectId);
-                }
 
                 // Call checkin with version label
                 Method checkinMethod = sysObject.getClass().getMethod("checkin", boolean.class, String.class);
@@ -521,9 +497,6 @@ public class ObjectServiceImpl implements ObjectService {
         sessionService.withSession(sessionId, dfSession -> {
             try {
                 Object sysObject = getObjectById(dfSession, objectId);
-                if (sysObject == null) {
-                    throw new ObjectNotFoundException(objectId);
-                }
 
                 if (allVersions) {
                     // Delete all versions
@@ -552,7 +525,14 @@ public class ObjectServiceImpl implements ObjectService {
         Class<?> sessionClass = Class.forName(DFC_SESSION_IFACE);
         Method getObjectMethod = sessionClass.getMethod("getObject", Class.forName(DFC_ID_IFACE));
 
-        return getObjectMethod.invoke(dfSession, dfId);
+        try {
+            return getObjectMethod.invoke(dfSession, dfId);
+        } catch (InvocationTargetException e) {
+            if (DfcExceptionUtils.isInstanceOf(e.getTargetException(), DfcExceptionUtils.DFC_ID_NOT_FOUND_EXCEPTION)) {
+                throw new ObjectNotFoundException(objectId);
+            }
+            throw e;
+        }
     }
 
     private ObjectInfo extractObjectInfo(Object sysObject, String objectId) throws Exception {

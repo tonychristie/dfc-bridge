@@ -5,10 +5,6 @@ package com.spirecentral.dfcbridge.exception;
  */
 public class DqlException extends DfcBridgeException {
 
-    public DqlException(String message) {
-        super("DQL_ERROR", message);
-    }
-
     public DqlException(String message, Throwable cause) {
         super("DQL_ERROR", message, cause);
     }

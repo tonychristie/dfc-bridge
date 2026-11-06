@@ -21,95 +21,16 @@ public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-    @ExceptionHandler(SessionNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleSessionNotFound(
-            SessionNotFoundException ex, HttpServletRequest request) {
-        log.warn("Session not found: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ErrorResponse.builder()
-                        .code(ex.getCode())
-                        .message(ex.getMessage())
-                        .path(request.getRequestURI())
-                        .build());
-    }
-
-    @ExceptionHandler(ConnectionException.class)
-    public ResponseEntity<ErrorResponse> handleConnectionException(
-            ConnectionException ex, HttpServletRequest request) {
-        log.error("Connection failed: {}", ex.getMessage(), ex);
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(ErrorResponse.builder()
-                        .code(ex.getCode())
-                        .message(ex.getMessage())
-                        .path(request.getRequestURI())
-                        .build());
-    }
-
-    @ExceptionHandler(DqlException.class)
-    public ResponseEntity<ErrorResponse> handleDqlException(
-            DqlException ex, HttpServletRequest request) {
-        log.warn("DQL error: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.builder()
-                        .code(ex.getCode())
-                        .message(ex.getMessage())
-                        .path(request.getRequestURI())
-                        .build());
-    }
-
-    @ExceptionHandler(ObjectNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleObjectNotFound(
-            ObjectNotFoundException ex, HttpServletRequest request) {
-        log.warn("Object not found: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ErrorResponse.builder()
-                        .code(ex.getCode())
-                        .message(ex.getMessage())
-                        .path(request.getRequestURI())
-                        .build());
-    }
-
-    @ExceptionHandler(UserNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleUserNotFound(
-            UserNotFoundException ex, HttpServletRequest request) {
-        log.warn("User not found: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ErrorResponse.builder()
-                        .code(ex.getCode())
-                        .message(ex.getMessage())
-                        .path(request.getRequestURI())
-                        .build());
-    }
-
-    @ExceptionHandler(GroupNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleGroupNotFound(
-            GroupNotFoundException ex, HttpServletRequest request) {
-        log.warn("Group not found: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ErrorResponse.builder()
-                        .code(ex.getCode())
-                        .message(ex.getMessage())
-                        .path(request.getRequestURI())
-                        .build());
-    }
-
-    @ExceptionHandler(DfcUnavailableException.class)
-    public ResponseEntity<ErrorResponse> handleDfcUnavailable(
-            DfcUnavailableException ex, HttpServletRequest request) {
-        log.warn("DFC unavailable: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(ErrorResponse.builder()
-                        .code(ex.getCode())
-                        .message(ex.getMessage())
-                        .path(request.getRequestURI())
-                        .build());
-    }
-
     @ExceptionHandler(DfcBridgeException.class)
     public ResponseEntity<ErrorResponse> handleDfcBridgeException(
             DfcBridgeException ex, HttpServletRequest request) {
-        log.error("DFC Bridge error: {}", ex.getMessage(), ex);
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+        HttpStatus status = ex.getStatus();
+        if (status.is5xxServerError()) {
+            log.error("{} {}: {}", status.value(), ex.getCode(), ex.getMessage(), ex);
+        } else {
+            log.warn("{} {}: {}", status.value(), ex.getCode(), ex.getMessage());
+        }
+        return ResponseEntity.status(status)
                 .body(ErrorResponse.builder()
                         .code(ex.getCode())
                         .message(ex.getMessage())

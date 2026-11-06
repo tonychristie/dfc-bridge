@@ -1,10 +1,13 @@
 package com.spirecentral.dfcbridge.service.impl;
 
+import com.documentum.fc.client.DfIdNotFoundException;
+import com.documentum.fc.common.DfException;
 import com.documentum.fc.common.DfTime;
 import com.documentum.fc.common.IDfId;
 import com.documentum.fc.common.IDfTime;
 import com.spirecentral.dfcbridge.dto.ApiRequest;
 import com.spirecentral.dfcbridge.exception.DfcBridgeException;
+import com.spirecentral.dfcbridge.exception.ObjectNotFoundException;
 import com.spirecentral.dfcbridge.model.AttributeValue;
 import com.spirecentral.dfcbridge.model.ObjectInfo;
 import com.spirecentral.dfcbridge.service.DfcSessionService;
@@ -546,6 +549,30 @@ class ObjectServiceImplTest {
         assertNull(mockObject.getLastSetAttrName());
     }
 
+    // ========== missing object tests ==========
+
+    @Test
+    void getObject_idDoesNotExist_throwsObjectNotFound() {
+        stubSessionThrowingIdNotFound();
+
+        assertThrows(ObjectNotFoundException.class,
+                () -> objectService.getObject("test-session", "0900000000000001"));
+    }
+
+    @Test
+    void deleteObject_idDoesNotExist_throwsObjectNotFound() {
+        stubSessionThrowingIdNotFound();
+
+        assertThrows(ObjectNotFoundException.class,
+                () -> objectService.deleteObject("test-session", "0900000000000001", false));
+    }
+
+    private void stubSessionThrowingIdNotFound() {
+        MockDfSession mockSession = new MockDfSession();
+        mockSession.setGetObjectException(new DfIdNotFoundException("DM_API_E_EXIST"));
+        stubSession(mockSession);
+    }
+
     private void stubSessionReturning(Object object) {
         MockDfSession mockSession = new MockDfSession();
         mockSession.setObjectToReturn(object);
@@ -568,13 +595,26 @@ class ObjectServiceImplTest {
      */
     public static class MockDfSession implements com.documentum.fc.client.IDfSession {
         private Object objectToReturn;
+        private DfException getObjectException;
 
         public void setObjectToReturn(Object obj) {
             this.objectToReturn = obj;
         }
 
-        public Object getObject(com.documentum.fc.common.IDfId id) {
+        public void setGetObjectException(DfException e) {
+            this.getObjectException = e;
+        }
+
+        public Object getObject(com.documentum.fc.common.IDfId id) throws DfException {
+            if (getObjectException != null) {
+                throw getObjectException;
+            }
             return objectToReturn;
+        }
+
+        @Override
+        public boolean isConnected() {
+            return true;
         }
 
         @Override

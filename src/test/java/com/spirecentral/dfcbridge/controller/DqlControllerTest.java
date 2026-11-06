@@ -1,5 +1,6 @@
 package com.spirecentral.dfcbridge.controller;
 
+import com.documentum.fc.common.DfException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.spirecentral.dfcbridge.dto.DqlRequest;
 import com.spirecentral.dfcbridge.exception.DqlException;
@@ -102,7 +103,8 @@ class DqlControllerTest {
                 .build();
 
         when(dqlService.executeQuery(any(DqlRequest.class)))
-                .thenThrow(new DqlException("Unknown type: invalid_type"));
+                .thenThrow(new DqlException("DQL execution failed: DM_QUERY_E_SYNTAX",
+                        new DfException("DM_QUERY_E_SYNTAX")));
 
         mockMvc.perform(post("/api/v1/dql")
                         .contentType(MediaType.APPLICATION_JSON)
