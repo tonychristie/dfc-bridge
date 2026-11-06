@@ -22,6 +22,8 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Function;
 
 /**
  * Implementation of DfcSessionService using reflection to call DFC APIs.
@@ -140,7 +142,13 @@ public class DfcSessionServiceImpl implements DfcSessionService {
     public void disconnect(String sessionId) {
         SessionHolder holder = sessions.remove(sessionId);
         if (holder != null) {
-            releaseDfcSession(holder);
+            holder.lock.lock();
+            try {
+                holder.released = true;
+                releaseDfcSession(holder);
+            } finally {
+                holder.lock.unlock();
+            }
             log.info("Session {} disconnected", sessionId);
         }
     }
@@ -160,12 +168,17 @@ public class DfcSessionServiceImpl implements DfcSessionService {
         if (holder == null) {
             return false;
         }
+        holder.lock.lock();
         try {
-            // Check if session is still connected
+            if (holder.released) {
+                return false;
+            }
             return (Boolean) invokeMethod(holder.dfSession, "isConnected");
         } catch (Exception e) {
             log.warn("Error checking session validity: {}", e.getMessage());
             return false;
+        } finally {
+            holder.lock.unlock();
         }
     }
 
@@ -178,34 +191,49 @@ public class DfcSessionServiceImpl implements DfcSessionService {
     }
 
     @Override
-    public Object getDfcSession(String sessionId) {
-        log.debug("getDfcSession: Retrieving session for sessionId={}", sessionId);
-
+    public <T> T withSession(String sessionId, Function<Object, T> work) {
         SessionHolder holder = sessions.get(sessionId);
         if (holder == null) {
-            log.debug("getDfcSession: Session not found for sessionId={}", sessionId);
             throw new SessionNotFoundException(sessionId);
         }
-
-        touchSession(sessionId);
-        return holder.dfSession;
+        holder.lock.lock();
+        try {
+            // disconnect or cleanup may have released the session while this request waited for the lock
+            if (holder.released) {
+                throw new SessionNotFoundException(sessionId);
+            }
+            holder.sessionInfo.setLastActivity(Instant.now());
+            return work.apply(holder.dfSession);
+        } finally {
+            holder.lock.unlock();
+        }
     }
 
     /**
-     * Clean up expired sessions periodically.
+     * Clean up expired sessions periodically. A session in use by a request is skipped
+     * and checked again on the next run.
      */
     @Scheduled(fixedRateString = "${dfc.session.cleanup-interval-ms:60000}")
     public void cleanupExpiredSessions() {
         Instant cutoff = Instant.now().minusSeconds(sessionTimeoutMinutes * 60L);
         sessions.entrySet().removeIf(entry -> {
-            if (entry.getValue().sessionInfo.getLastActivity().isBefore(cutoff)) {
+            SessionHolder holder = entry.getValue();
+            if (!holder.lock.tryLock()) {
+                return false;
+            }
+            try {
+                if (!holder.sessionInfo.getLastActivity().isBefore(cutoff)) {
+                    return false;
+                }
                 log.info("Cleaning up expired session: {}", entry.getKey());
                 // Release the DFC session directly instead of calling disconnect()
                 // since removeIf will handle removing the entry from the map
-                releaseDfcSession(entry.getValue());
+                holder.released = true;
+                releaseDfcSession(holder);
                 return true;
+            } finally {
+                holder.lock.unlock();
             }
-            return false;
         });
     }
 
@@ -278,6 +306,8 @@ public class DfcSessionServiceImpl implements DfcSessionService {
      * Internal holder for session objects.
      */
     private static class SessionHolder {
+        final ReentrantLock lock = new ReentrantLock();
+        boolean released;
         Object sessionManager;
         Object dfSession;
         SessionInfo sessionInfo;

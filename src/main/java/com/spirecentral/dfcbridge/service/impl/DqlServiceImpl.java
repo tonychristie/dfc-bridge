@@ -43,87 +43,87 @@ public class DqlServiceImpl implements DqlService {
         log.debug("Executing DQL query: {}", request.getQuery());
         long startTime = System.currentTimeMillis();
 
-        Object dfSession = sessionService.getDfcSession(request.getSessionId());
-
-        try {
-            // Create query object
-            Class<?> dfQueryClass = Class.forName(DFC_QUERY_CLASS);
-            Object query = dfQueryClass.getDeclaredConstructor().newInstance();
-
-            // Set DQL
-            Method setDqlMethod = dfQueryClass.getMethod("setDQL", String.class);
-            setDqlMethod.invoke(query, request.getQuery());
-
-            // Execute query
-            Class<?> sessionClass = dfSession.getClass();
-            Class<?> queryInterface = Class.forName(DFC_QUERY_IFACE);
-
-            // IDfQuery.DF_READ_QUERY = 0
-            Method executeMethod = queryInterface.getMethod("execute",
-                    Class.forName("com.documentum.fc.client.IDfSession"), int.class);
-            Object collection = executeMethod.invoke(query, dfSession, 0);
-
-            // Process results
-            List<QueryResult.ColumnInfo> columns = new ArrayList<>();
-            List<Map<String, Object>> rows = new ArrayList<>();
-            boolean columnsExtracted = false;
-            int rowCount = 0;
-            int skipped = 0;
-
-            Class<?> collectionClass = Class.forName(DFC_COLLECTION_IFACE);
-            Method nextMethod = collectionClass.getMethod("next");
-            Method closeMethod = collectionClass.getMethod("close");
-
+        return sessionService.withSession(request.getSessionId(), dfSession -> {
             try {
-                while ((Boolean) nextMethod.invoke(collection)) {
-                    // Skip rows for pagination
-                    if (skipped < request.getStartRow()) {
-                        skipped++;
-                        continue;
-                    }
+                // Create query object
+                Class<?> dfQueryClass = Class.forName(DFC_QUERY_CLASS);
+                Object query = dfQueryClass.getDeclaredConstructor().newInstance();
 
-                    // Extract columns on first row
-                    if (!columnsExtracted) {
-                        columns = extractColumns(collection);
-                        columnsExtracted = true;
-                    }
+                // Set DQL
+                Method setDqlMethod = dfQueryClass.getMethod("setDQL", String.class);
+                setDqlMethod.invoke(query, request.getQuery());
 
-                    // Check max rows
-                    if (rowCount >= request.getMaxRows()) {
-                        // There are more rows
-                        long executionTime = System.currentTimeMillis() - startTime;
-                        return QueryResult.builder()
-                                .columns(columns)
-                                .rows(rows)
-                                .rowCount(rowCount)
-                                .hasMore(true)
-                                .executionTimeMs(executionTime)
-                                .build();
-                    }
+                // Execute query
+                Class<?> sessionClass = dfSession.getClass();
+                Class<?> queryInterface = Class.forName(DFC_QUERY_IFACE);
 
-                    // Extract row data
-                    Map<String, Object> row = extractRow(collection, columns);
-                    rows.add(row);
-                    rowCount++;
+                // IDfQuery.DF_READ_QUERY = 0
+                Method executeMethod = queryInterface.getMethod("execute",
+                        Class.forName("com.documentum.fc.client.IDfSession"), int.class);
+                Object collection = executeMethod.invoke(query, dfSession, 0);
+
+                // Process results
+                List<QueryResult.ColumnInfo> columns = new ArrayList<>();
+                List<Map<String, Object>> rows = new ArrayList<>();
+                boolean columnsExtracted = false;
+                int rowCount = 0;
+                int skipped = 0;
+
+                Class<?> collectionClass = Class.forName(DFC_COLLECTION_IFACE);
+                Method nextMethod = collectionClass.getMethod("next");
+                Method closeMethod = collectionClass.getMethod("close");
+
+                try {
+                    while ((Boolean) nextMethod.invoke(collection)) {
+                        // Skip rows for pagination
+                        if (skipped < request.getStartRow()) {
+                            skipped++;
+                            continue;
+                        }
+
+                        // Extract columns on first row
+                        if (!columnsExtracted) {
+                            columns = extractColumns(collection);
+                            columnsExtracted = true;
+                        }
+
+                        // Check max rows
+                        if (rowCount >= request.getMaxRows()) {
+                            // There are more rows
+                            long executionTime = System.currentTimeMillis() - startTime;
+                            return QueryResult.builder()
+                                    .columns(columns)
+                                    .rows(rows)
+                                    .rowCount(rowCount)
+                                    .hasMore(true)
+                                    .executionTimeMs(executionTime)
+                                    .build();
+                        }
+
+                        // Extract row data
+                        Map<String, Object> row = extractRow(collection, columns);
+                        rows.add(row);
+                        rowCount++;
+                    }
+                } finally {
+                    closeMethod.invoke(collection);
                 }
-            } finally {
-                closeMethod.invoke(collection);
+
+                long executionTime = System.currentTimeMillis() - startTime;
+                log.debug("Query returned {} rows in {}ms", rowCount, executionTime);
+
+                return QueryResult.builder()
+                        .columns(columns)
+                        .rows(rows)
+                        .rowCount(rowCount)
+                        .hasMore(false)
+                        .executionTimeMs(executionTime)
+                        .build();
+
+            } catch (Exception e) {
+                throw new DqlException("DQL execution failed: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
             }
-
-            long executionTime = System.currentTimeMillis() - startTime;
-            log.debug("Query returned {} rows in {}ms", rowCount, executionTime);
-
-            return QueryResult.builder()
-                    .columns(columns)
-                    .rows(rows)
-                    .rowCount(rowCount)
-                    .hasMore(false)
-                    .executionTimeMs(executionTime)
-                    .build();
-
-        } catch (Exception e) {
-            throw new DqlException("DQL execution failed: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
-        }
+        });
     }
 
     private List<QueryResult.ColumnInfo> extractColumns(Object collection) throws Exception {

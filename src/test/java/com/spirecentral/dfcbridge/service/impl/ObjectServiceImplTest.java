@@ -17,6 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -39,6 +40,11 @@ class ObjectServiceImplTest {
         objectService = new ObjectServiceImpl(sessionService);
     }
 
+    private void stubSession(Object dfSession) {
+        when(sessionService.withSession(eq("test-session"), any())).thenAnswer(
+                invocation -> invocation.<Function<Object, Object>>getArgument(1).apply(dfSession));
+    }
+
     // ========== getObject tests for different object types ==========
 
     @Test
@@ -51,7 +57,7 @@ class ObjectServiceImplTest {
         mockObject.setPermit(6);
         mockSession.setObjectToReturn(mockObject);
 
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
@@ -73,7 +79,7 @@ class ObjectServiceImplTest {
         mockObject.setPermit(7);
         mockSession.setObjectToReturn(mockObject);
 
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "0b00000180000001");
@@ -94,7 +100,7 @@ class ObjectServiceImplTest {
         mockGroup.setPermit(7);
         mockSession.setObjectToReturn(mockGroup);
 
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act - this would fail before the fix because dm_group doesn't have getObjectName
         ObjectInfo result = objectService.getObject("test-session", "1200000180000001");
@@ -115,7 +121,7 @@ class ObjectServiceImplTest {
         mockUser.setPermit(7);
         mockSession.setObjectToReturn(mockUser);
 
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act - this would fail before the fix because dm_user doesn't have getObjectName
         ObjectInfo result = objectService.getObject("test-session", "1100000180000001");
@@ -135,7 +141,7 @@ class ObjectServiceImplTest {
         mockFormat.setName("pdf");
         mockSession.setObjectToReturn(mockFormat);
 
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act - dm_format uses "name" attribute, not "object_name"
         ObjectInfo result = objectService.getObject("test-session", "2700000180000001");
@@ -157,7 +163,7 @@ class ObjectServiceImplTest {
         mockGroup.setGroupName("docu");
         mockSession.setObjectToReturn(mockGroup);
 
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "1200000180000100");
@@ -180,7 +186,7 @@ class ObjectServiceImplTest {
         mockObject.setPermit(7);
         mockSession.setObjectToReturn(mockObject);
 
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
@@ -208,7 +214,7 @@ class ObjectServiceImplTest {
         mockObject.addAttribute("object_name", 2, false, "test.pdf");
 
         mockSession.setObjectToReturn(mockObject);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
@@ -243,7 +249,7 @@ class ObjectServiceImplTest {
         mockObject.addAttribute("object_name", 2, false, "test.pdf");
 
         mockSession.setObjectToReturn(mockObject);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
@@ -275,7 +281,7 @@ class ObjectServiceImplTest {
         mockObject.addAttribute("a_is_hidden", 0, false, false);           // BOOLEAN
 
         mockSession.setObjectToReturn(mockObject);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
@@ -319,7 +325,7 @@ class ObjectServiceImplTest {
         mockObject.addAttribute("object_name", 2, false, "test.pdf");
 
         mockSession.setObjectToReturn(mockObject);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
@@ -356,7 +362,7 @@ class ObjectServiceImplTest {
         mockObject.addAttribute("r_content_size", 1, false, 98765);
 
         mockSession.setObjectToReturn(mockObject);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
@@ -412,7 +418,7 @@ class ObjectServiceImplTest {
         mockObject.addAttribute("i_cabinet_id", 3, false, "0c04719980000107"); // DM_ID = 3
 
         mockSession.setObjectToReturn(mockObject);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
@@ -448,7 +454,7 @@ class ObjectServiceImplTest {
         mockObject.addAttribute("i_folder_id", 3, true, "0c04719980000107", "0c04719980000108", "0c04719980000109"); // DM_ID = 3
 
         mockSession.setObjectToReturn(mockObject);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
@@ -485,7 +491,7 @@ class ObjectServiceImplTest {
         mockObject.addAttribute("i_folder_id", 3, true); // no values - DM_ID = 3
 
         mockSession.setObjectToReturn(mockObject);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
@@ -543,7 +549,7 @@ class ObjectServiceImplTest {
     private void stubSessionReturning(Object object) {
         MockDfSession mockSession = new MockDfSession();
         mockSession.setObjectToReturn(object);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
     }
 
     private ApiRequest apiRequest(String method, Object... args) {

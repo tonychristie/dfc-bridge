@@ -103,6 +103,7 @@ On start, the script extracts the JAR into `target/extracted` when the JAR has c
 | `DFC_HOME` | Path to DFC shared libraries | `$HOME/documentum/shared` |
 | `DFC_CONFIG` | Path to DFC config directory | `$HOME/documentum/config` |
 | `SERVER_PORT` | Server port | 9876 |
+| `SERVER_ADDRESS` | Address the server listens on | 127.0.0.1 |
 
 ### Alternative: Manual Java Invocation
 
@@ -126,11 +127,28 @@ Application configuration is in `src/main/resources/application.yml`:
 
 ```yaml
 server:
+  address: 127.0.0.1
   port: 9876
 
 dfc:
   session:
     timeout-minutes: 30      # Session timeout
+```
+
+### Listening Address
+
+The bridge listens on **127.0.0.1** only, so only the local machine can reach it. The bridge has no authentication: any client that can reach it can open a session and run any DFC method or dmAPI command as the connected user.
+
+To accept connections from other hosts, set the address to `0.0.0.0`:
+
+**With the startup script:**
+```bash
+SERVER_ADDRESS=0.0.0.0 ./start-dfc-bridge.sh
+```
+
+**With `java -jar`:**
+```bash
+java -jar dfc-bridge-1.2.0.jar --server.address=0.0.0.0
 ```
 
 ### Port Configuration
@@ -156,6 +174,7 @@ Create `application.yml` in the same directory as the JAR.
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `SERVER_PORT` | HTTP port | 9876 |
+| `SERVER_ADDRESS` | Address the server listens on | 127.0.0.1 |
 | `DFC_SESSION_TIMEOUT_MINUTES` | Session timeout | 30 |
 | `DFC_HOME` | Path to DFC shared libraries (used by startup script) | - |
 | `DFC_CONFIG` | Path to DFC config directory (used by startup script) | - |

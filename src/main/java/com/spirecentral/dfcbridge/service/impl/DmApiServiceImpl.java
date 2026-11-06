@@ -60,51 +60,51 @@ public class DmApiServiceImpl implements DmApiService {
                 request.getApiType(), request.getCommand(), request.getSessionId());
 
         long startTime = System.currentTimeMillis();
-        Object dfSession = sessionService.getDfcSession(request.getSessionId());
+        return sessionService.withSession(request.getSessionId(), dfSession -> {
+            try {
+                Object result;
+                String resultType;
 
-        try {
-            Object result;
-            String resultType;
+                String apiType = request.getApiType().toLowerCase();
+                String command = request.getCommand();
 
-            String apiType = request.getApiType().toLowerCase();
-            String command = request.getCommand();
+                switch (apiType) {
+                    case "get":
+                        result = invokeApiGet(dfSession, command);
+                        resultType = "String";
+                        break;
+                    case "exec":
+                        result = invokeApiExec(dfSession, command);
+                        resultType = "Boolean";
+                        break;
+                    case "set":
+                        result = invokeApiSet(dfSession, command);
+                        resultType = "Boolean";
+                        break;
+                    default:
+                        throw new DfcBridgeException("INVALID_API_TYPE",
+                                "Invalid API type: " + apiType + ". Must be 'get', 'exec', or 'set'");
+                }
 
-            switch (apiType) {
-                case "get":
-                    result = invokeApiGet(dfSession, command);
-                    resultType = "String";
-                    break;
-                case "exec":
-                    result = invokeApiExec(dfSession, command);
-                    resultType = "Boolean";
-                    break;
-                case "set":
-                    result = invokeApiSet(dfSession, command);
-                    resultType = "Boolean";
-                    break;
-                default:
-                    throw new DfcBridgeException("INVALID_API_TYPE",
-                            "Invalid API type: " + apiType + ". Must be 'get', 'exec', or 'set'");
+                long executionTime = System.currentTimeMillis() - startTime;
+
+                log.debug("dmAPI result: type={}, value={}, executionTime={}ms",
+                        resultType, result, executionTime);
+                log.debug("=== dmAPI Execute End ===");
+
+                return ApiResponse.builder()
+                        .result(result)
+                        .resultType(resultType)
+                        .executionTimeMs(executionTime)
+                        .build();
+
+            } catch (DfcBridgeException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new DfcBridgeException("DMAPI_ERROR",
+                        "Failed to execute dmAPI: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
             }
-
-            long executionTime = System.currentTimeMillis() - startTime;
-
-            log.debug("dmAPI result: type={}, value={}, executionTime={}ms",
-                    resultType, result, executionTime);
-            log.debug("=== dmAPI Execute End ===");
-
-            return ApiResponse.builder()
-                    .result(result)
-                    .resultType(resultType)
-                    .executionTimeMs(executionTime)
-                    .build();
-
-        } catch (DfcBridgeException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new DfcBridgeException("DMAPI_ERROR",
-                    "Failed to execute dmAPI: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
-        }
+        });
     }
 
     /**
