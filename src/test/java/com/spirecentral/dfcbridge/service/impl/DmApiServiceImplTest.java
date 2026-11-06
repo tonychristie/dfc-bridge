@@ -12,6 +12,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.lang.reflect.InvocationTargetException;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -42,6 +43,11 @@ class DmApiServiceImplTest {
         dmApiService = new DmApiServiceImpl(sessionService);
     }
 
+    private void stubSession(Object dfSession) {
+        when(sessionService.withSession(eq("test-session"), any())).thenAnswer(
+                invocation -> invocation.<Function<Object, Object>>getArgument(1).apply(dfSession));
+    }
+
     // ========== apiGet tests ==========
 
     @Test
@@ -49,7 +55,7 @@ class DmApiServiceImplTest {
         // Arrange
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiGetResult("test-result");
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
@@ -76,7 +82,7 @@ class DmApiServiceImplTest {
         // Arrange
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiGetResult(null);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
@@ -99,7 +105,7 @@ class DmApiServiceImplTest {
         // Arrange - command with no comma (method only, empty args)
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiGetResult("result");
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
@@ -121,7 +127,7 @@ class DmApiServiceImplTest {
         // Arrange
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiGetResult("result");
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
@@ -144,7 +150,7 @@ class DmApiServiceImplTest {
         // Arrange - traditional dmAPI format with "s0" session handle
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiGetResult("dump-result");
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
@@ -166,7 +172,7 @@ class DmApiServiceImplTest {
         // Arrange - traditional dmAPI format with "c" (current session) handle
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiGetResult("login");
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
@@ -188,7 +194,7 @@ class DmApiServiceImplTest {
         // Arrange - dfc-bridge UUID included in command
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiGetResult("dump-result");
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
@@ -210,7 +216,7 @@ class DmApiServiceImplTest {
         // Arrange - first arg is not a session identifier (e.g., docbase name)
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiGetResult("config-value");
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
@@ -232,7 +238,7 @@ class DmApiServiceImplTest {
         // Arrange - command with real args (no session identifier)
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiGetResult("result");
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
@@ -254,7 +260,7 @@ class DmApiServiceImplTest {
         // Arrange - command with only "session" as arg
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiGetResult("result");
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
@@ -302,7 +308,7 @@ class DmApiServiceImplTest {
         // Arrange
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiExecResult(true);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
@@ -328,7 +334,7 @@ class DmApiServiceImplTest {
         // Arrange
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiExecResult(false);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
@@ -349,7 +355,7 @@ class DmApiServiceImplTest {
         // Arrange
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiExecResult(true);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
@@ -372,7 +378,7 @@ class DmApiServiceImplTest {
         // Arrange
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiSetResult(true);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Command: "set,session,objectId,attrName,value"
         // After stripping "session": method="set", args="objectId,attrName", value="NewName"
@@ -401,7 +407,7 @@ class DmApiServiceImplTest {
         // Arrange - value is everything after the last comma in the args portion
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiSetResult(true);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
@@ -423,7 +429,7 @@ class DmApiServiceImplTest {
     void apiSet_throwsExceptionForMissingValue() {
         // Arrange - command with method but no value separator in args
         MockDfSession mockSession = new MockDfSession();
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
@@ -444,7 +450,7 @@ class DmApiServiceImplTest {
         // Arrange
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiSetResult(true);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
@@ -466,7 +472,7 @@ class DmApiServiceImplTest {
     void execute_throwsExceptionForInvalidApiType() {
         // Arrange
         MockDfSession mockSession = new MockDfSession();
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
@@ -487,7 +493,7 @@ class DmApiServiceImplTest {
     void execute_throwsExceptionForNullApiType() {
         // Arrange
         MockDfSession mockSession = new MockDfSession();
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
@@ -503,7 +509,7 @@ class DmApiServiceImplTest {
     void execute_wrapsReflectionExceptions() {
         // Arrange - use a mock that doesn't have the required methods
         Object invalidSession = new Object();  // no apiGet method
-        when(sessionService.getDfcSession("test-session")).thenReturn(invalidSession);
+        stubSession(invalidSession);
 
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
@@ -523,7 +529,7 @@ class DmApiServiceImplTest {
     void execute_reportsMessageOfExceptionThrownByDfc() {
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiGetException(new RuntimeException("DM_API_E_NOATTR"));
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
@@ -543,7 +549,7 @@ class DmApiServiceImplTest {
         // Arrange
         MockDfSession mockSession = new MockDfSession();
         mockSession.setApiGetResult("result");
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("test-session")
