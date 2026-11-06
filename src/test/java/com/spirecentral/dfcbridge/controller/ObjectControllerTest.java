@@ -382,7 +382,8 @@ class ObjectControllerTest {
         DmApiRequest request = DmApiRequest.builder()
                 .sessionId("session-123")
                 .apiType("set")
-                .command("set,session,0900000180000001,object_name,NewName")
+                .command("set,session,0900000180000001,object_name")
+                .value("NewName")
                 .build();
 
         ApiResponse response = ApiResponse.builder()

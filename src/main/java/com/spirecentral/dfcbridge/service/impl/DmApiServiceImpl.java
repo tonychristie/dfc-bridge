@@ -79,7 +79,7 @@ public class DmApiServiceImpl implements DmApiService {
                         resultType = "Boolean";
                         break;
                     case "set":
-                        result = invokeApiSet(dfSession, command);
+                        result = invokeApiSet(dfSession, command, request.getValue());
                         resultType = "Boolean";
                         break;
                     default:
@@ -165,25 +165,20 @@ public class DmApiServiceImpl implements DmApiService {
      * Invoke IDfSession.apiSet(method, args, value) via reflection.
      * DFC signature: boolean apiSet(String method, String args, String value)
      *
-     * Command format: "method,args,value" (e.g., "set,session,objectId,attrName,value")
-     * Split at first comma to get method name, then at last comma to separate value from args.
+     * Command format: "method,args" with the value passed separately
+     * (e.g., command "set,session,objectId,attrName" and value "Smith, John").
+     * Split at first comma to get method name and arguments.
      */
-    private boolean invokeApiSet(Object dfSession, String command) throws Exception {
-        // First split to get method name
-        String[] parts = splitCommand(command);
-        String method = parts[0];
-        String argsAndValue = parts[1];
-
-        // Then split args from value (value is after the last comma)
-        int lastComma = argsAndValue.lastIndexOf(',');
-        if (lastComma == -1) {
+    private boolean invokeApiSet(Object dfSession, String command, String value) throws Exception {
+        if (value == null) {
             throw new DfcBridgeException("INVALID_SET_COMMAND",
-                    "Invalid apiSet command format. Expected: method,args,value (e.g., set,session,objectId,attrName,value)",
+                    "A set command needs a value",
                     HttpStatus.BAD_REQUEST);
         }
 
-        String args = argsAndValue.substring(0, lastComma);
-        String value = argsAndValue.substring(lastComma + 1);
+        String[] parts = splitCommand(command);
+        String method = parts[0];
+        String args = parts[1];
 
         log.debug("invokeApiSet: method='{}', args='{}', value='{}'", method, args, value);
 
