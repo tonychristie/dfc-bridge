@@ -331,10 +331,7 @@ Response when DFC unavailable:
 
 Error: `DFC_UNAVAILABLE - DFC libraries are not available`
 
-Solution: Ensure DFC JARs are on the classpath when running the application:
-```bash
-export CLASSPATH=$DFC_HOME/shared/lib/dfc.jar:$DFC_HOME/shared/lib/*
-```
+Solution: Set `DFC_HOME` to the directory that holds the DFC JARs and start with `./start-dfc-bridge.sh`, or follow [Manual Invocation](DEPLOYMENT.md#manual-invocation) in `DEPLOYMENT.md`. Run `./start-dfc-bridge.sh --verify` to check the setup.
 
 ### Connection refused
 
