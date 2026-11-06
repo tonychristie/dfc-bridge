@@ -681,6 +681,11 @@ class DmApiServiceImplTest {
         }
 
         @Override
+        public Object getFolderByPath(String folderPath) {
+            return null;
+        }
+
+        @Override
         public boolean isConnected() {
             return true;
         }

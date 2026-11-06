@@ -31,6 +31,14 @@ public interface IDfSession {
     Object getType(String typeName);
 
     /**
+     * Get a folder by its path.
+     *
+     * @param folderPath the folder path
+     * @return the folder, or null when no folder has the path
+     */
+    Object getFolderByPath(String folderPath);
+
+    /**
      * Check whether the session is connected.
      *
      * @return false once the session has been released
