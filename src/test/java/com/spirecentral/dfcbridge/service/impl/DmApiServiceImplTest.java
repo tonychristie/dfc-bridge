@@ -688,6 +688,11 @@ class DmApiServiceImplTest {
         }
 
         @Override
+        public Object getType(String typeName) {
+            return null;
+        }
+
+        @Override
         public boolean isConnected() {
             return true;
         }

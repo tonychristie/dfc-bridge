@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -43,6 +44,10 @@ public class ObjectServiceImpl implements ObjectService {
     private static final String DFC_FOLDER_IFACE = "com.documentum.fc.client.IDfFolder";
     private static final String DFC_TYPE_IFACE = "com.documentum.fc.client.IDfType";
     private static final String DFC_ACL_IFACE = "com.documentum.fc.client.IDfACL";
+    private static final String DFC_COLLECTION_IFACE = "com.documentum.fc.client.IDfCollection";
+
+    private static final int DM_INTEGER = 1;
+    private static final int DM_DOUBLE = 5;
 
     private final DfcSessionService sessionService;
 
@@ -126,25 +131,36 @@ public class ObjectServiceImpl implements ObjectService {
         log.debug("Updating object: {} with {} attributes", objectId, request.getAttributes().size());
 
         return sessionService.withSession(sessionId, dfSession -> {
+            Object sysObject = null;
+            boolean unsaved = false;
             try {
-                Object sysObject = getObjectById(dfSession, objectId);
+                sysObject = getObjectById(dfSession, objectId);
+                Map<String, Integer> dataTypes = buildTypeAttrDataTypes(sysObject);
 
-                // Set attributes
+                unsaved = true;
                 for (Map.Entry<String, Object> attr : request.getAttributes().entrySet()) {
-                    setObjectAttribute(sysObject, attr.getKey(), attr.getValue());
+                    setObjectAttribute(sysObject, attr.getKey(), attr.getValue(), dataTypes);
                 }
 
-                // Save if requested
                 if (request.isSave()) {
                     Method saveMethod = sysObject.getClass().getMethod("save");
                     saveMethod.invoke(sysObject);
+                    unsaved = false;
                 }
 
-                return extractObjectInfo(sysObject, objectId);
+                ObjectInfo info = extractObjectInfo(sysObject, objectId);
+                if (unsaved) {
+                    unsaved = false;
+                    sysObject.getClass().getMethod("revert").invoke(sysObject);
+                }
+                return info;
 
             } catch (ObjectNotFoundException e) {
                 throw e;
             } catch (Exception e) {
+                if (unsaved) {
+                    revertAfterFailure(sysObject, objectId);
+                }
                 throw new DfcBridgeException("UPDATE_ERROR",
                         "Failed to update object: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
             }
@@ -301,17 +317,20 @@ public class ObjectServiceImpl implements ObjectService {
                     Class<?> sessionClass = Class.forName(DFC_SESSION_IFACE);
                     Method getTypeMethod = sessionClass.getMethod("getType", String.class);
                     target = getTypeMethod.invoke(dfSession, request.getTypeName());
+                    if (target == null) {
+                        throw new ObjectNotFoundException("Type not found: " + request.getTypeName());
+                    }
                 } else {
                     target = dfSession;
                 }
 
-                // Find and invoke method
                 Object result = invokeMethod(target, request.getMethod(), request.getArgs());
+                Object resultValue = toResultValue(result);
 
                 long executionTime = System.currentTimeMillis() - startTime;
 
                 return ApiResponse.builder()
-                        .result(result)
+                        .result(resultValue)
                         .resultType(result != null ? result.getClass().getSimpleName() : "null")
                         .executionTimeMs(executionTime)
                         .build();
@@ -461,8 +480,9 @@ public class ObjectServiceImpl implements ObjectService {
 
                 // Set additional attributes if provided
                 if (request.getAttributes() != null) {
+                    Map<String, Integer> dataTypes = buildTypeAttrDataTypes(newObject);
                     for (Map.Entry<String, Object> attr : request.getAttributes().entrySet()) {
-                        setObjectAttribute(newObject, attr.getKey(), attr.getValue());
+                        setObjectAttribute(newObject, attr.getKey(), attr.getValue(), dataTypes);
                     }
                 }
 
@@ -763,73 +783,74 @@ public class ObjectServiceImpl implements ObjectService {
         };
     }
 
-    private void setObjectAttribute(Object sysObject, String attrName, Object value) throws Exception {
-        // Check if this is a repeating attribute
+    private void setObjectAttribute(Object sysObject, String attrName, Object value,
+                                    Map<String, Integer> dataTypes) throws Exception {
         boolean isRepeating = (Boolean) invokeReflection(sysObject, "isAttrRepeating",
                 new Class<?>[]{String.class}, attrName);
+        Integer dataType = dataTypes.get(attrName);
+        if (dataType == null) {
+            dataType = (Integer) invokeReflection(sysObject, "getAttrDataType",
+                    new Class<?>[]{String.class}, attrName);
+        }
 
         if (isRepeating) {
-            setRepeatingAttribute(sysObject, attrName, value);
+            setRepeatingAttribute(sysObject, attrName, value, dataType);
         } else {
-            setScalarAttribute(sysObject, attrName, value);
+            setScalarAttribute(sysObject, attrName, value, dataType);
         }
     }
 
-    private void setScalarAttribute(Object sysObject, String attrName, Object value) throws Exception {
-        // Determine the setter method based on value type
-        if (value instanceof String) {
-            Method setStringMethod = sysObject.getClass().getMethod("setString", String.class, String.class);
-            setStringMethod.invoke(sysObject, attrName, value);
-        } else if (value instanceof Integer) {
-            Method setIntMethod = sysObject.getClass().getMethod("setInt", String.class, int.class);
-            setIntMethod.invoke(sysObject, attrName, value);
-        } else if (value instanceof Boolean) {
-            Method setBooleanMethod = sysObject.getClass().getMethod("setBoolean", String.class, boolean.class);
-            setBooleanMethod.invoke(sysObject, attrName, value);
-        } else if (value instanceof Double) {
-            Method setDoubleMethod = sysObject.getClass().getMethod("setDouble", String.class, double.class);
-            setDoubleMethod.invoke(sysObject, attrName, value);
-        } else {
-            // Default to string
-            Method setStringMethod = sysObject.getClass().getMethod("setString", String.class, String.class);
-            setStringMethod.invoke(sysObject, attrName, value.toString());
-        }
+    private void setScalarAttribute(Object sysObject, String attrName, Object value, int dataType) throws Exception {
+        Method setStringMethod = sysObject.getClass().getMethod("setString", String.class, String.class);
+        setStringMethod.invoke(sysObject, attrName, attributeText(attrName, value, dataType));
     }
 
-    private void setRepeatingAttribute(Object sysObject, String attrName, Object value) throws Exception {
-        // Clear existing values first
+    private void setRepeatingAttribute(Object sysObject, String attrName, Object value, int dataType) throws Exception {
         Method removeAllMethod = sysObject.getClass().getMethod("removeAll", String.class);
         removeAllMethod.invoke(sysObject, attrName);
 
-        // Handle list input
+        if (value == null) {
+            return;
+        }
         if (value instanceof List<?> valueList) {
             for (int i = 0; i < valueList.size(); i++) {
-                Object item = valueList.get(i);
-                setRepeatingValueAtIndex(sysObject, attrName, i, item);
+                setRepeatingValueAtIndex(sysObject, attrName, i, valueList.get(i), dataType);
             }
         } else {
-            // Scalar value - set as single-element repeating attribute
-            setRepeatingValueAtIndex(sysObject, attrName, 0, value);
+            setRepeatingValueAtIndex(sysObject, attrName, 0, value, dataType);
         }
     }
 
-    private void setRepeatingValueAtIndex(Object sysObject, String attrName, int index, Object value) throws Exception {
-        if (value instanceof String) {
-            Method method = sysObject.getClass().getMethod("setRepeatingString", String.class, int.class, String.class);
-            method.invoke(sysObject, attrName, index, value);
-        } else if (value instanceof Integer) {
-            Method method = sysObject.getClass().getMethod("setRepeatingInt", String.class, int.class, int.class);
-            method.invoke(sysObject, attrName, index, value);
-        } else if (value instanceof Boolean) {
-            Method method = sysObject.getClass().getMethod("setRepeatingBoolean", String.class, int.class, boolean.class);
-            method.invoke(sysObject, attrName, index, value);
-        } else if (value instanceof Double) {
-            Method method = sysObject.getClass().getMethod("setRepeatingDouble", String.class, int.class, double.class);
-            method.invoke(sysObject, attrName, index, value);
-        } else {
-            // Default to string
-            Method method = sysObject.getClass().getMethod("setRepeatingString", String.class, int.class, String.class);
-            method.invoke(sysObject, attrName, index, value.toString());
+    private void setRepeatingValueAtIndex(Object sysObject, String attrName, int index, Object value,
+                                          int dataType) throws Exception {
+        Method method = sysObject.getClass().getMethod("setRepeatingString", String.class, int.class, String.class);
+        method.invoke(sysObject, attrName, index, attributeText(attrName, value, dataType));
+    }
+
+    // setString parses the text for every data type, but "" fails on int and double attributes.
+    private String attributeText(String attrName, Object value, int dataType) {
+        if (value == null) {
+            return dataType == DM_INTEGER || dataType == DM_DOUBLE ? "0" : "";
+        }
+        if (value instanceof String text) {
+            return text;
+        }
+        if (value instanceof Boolean) {
+            return value.toString();
+        }
+        if (value instanceof Number) {
+            return new BigDecimal(value.toString()).toPlainString();
+        }
+        String kind = value instanceof List ? "a list" : "an object";
+        throw new IllegalArgumentException("Attribute " + attrName + " does not accept " + kind + " as a value");
+    }
+
+    private void revertAfterFailure(Object sysObject, String objectId) {
+        try {
+            sysObject.getClass().getMethod("revert").invoke(sysObject);
+        } catch (Exception e) {
+            log.warn("Could not revert object {} after a failed update: {}",
+                    objectId, DfcExceptionUtils.unwrap(e).getMessage());
         }
     }
 
@@ -878,20 +899,105 @@ public class ObjectServiceImpl implements ObjectService {
     }
 
     private Object invokeMethod(Object target, String methodName, List<Object> args) throws Exception {
-        // Find method with matching name
-        Method[] methods = target.getClass().getMethods();
-        for (Method method : methods) {
-            if (method.getName().equals(methodName)) {
-                int paramCount = method.getParameterCount();
-                int argCount = args != null ? args.size() : 0;
-
-                if (paramCount == argCount) {
-                    method.setAccessible(true);
-                    return method.invoke(target, convertArgs(method.getParameterTypes(), args));
-                }
+        List<Object> argList = args != null ? args : List.of();
+        Method chosen = null;
+        for (Method method : target.getClass().getMethods()) {
+            if (!method.getName().equals(methodName) || method.getParameterCount() != argList.size()) {
+                continue;
+            }
+            Class<?>[] paramTypes = method.getParameterTypes();
+            if (!acceptsArgs(paramTypes, argList)) {
+                continue;
+            }
+            if (!needsConversion(paramTypes, argList)) {
+                chosen = method;
+                break;
+            }
+            if (chosen == null) {
+                chosen = method;
             }
         }
-        throw new NoSuchMethodException("Method not found: " + methodName);
+        if (chosen == null) {
+            throw new NoSuchMethodException("No method " + methodName + " accepts the arguments ("
+                    + argTypeNames(argList) + ")");
+        }
+        chosen.setAccessible(true);
+        return chosen.invoke(target, convertArgs(chosen.getParameterTypes(), args));
+    }
+
+    private boolean acceptsArgs(Class<?>[] paramTypes, List<Object> args) {
+        for (int i = 0; i < paramTypes.length; i++) {
+            if (!acceptsArg(paramTypes[i], args.get(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Method.invoke widens Integer and Long to the primitive parameter type.
+    private boolean acceptsArg(Class<?> paramType, Object arg) {
+        if (arg == null) {
+            return !paramType.isPrimitive();
+        }
+        if (arg instanceof String && isConvertedParam(paramType)) {
+            return true;
+        }
+        if (paramType == int.class) {
+            return arg instanceof Integer;
+        }
+        if (paramType == long.class) {
+            return arg instanceof Integer || arg instanceof Long;
+        }
+        if (paramType == double.class) {
+            return arg instanceof Integer || arg instanceof Long || arg instanceof Double;
+        }
+        if (paramType == boolean.class) {
+            return arg instanceof Boolean;
+        }
+        return paramType.isInstance(arg);
+    }
+
+    private boolean needsConversion(Class<?>[] paramTypes, List<Object> args) {
+        for (int i = 0; i < paramTypes.length; i++) {
+            if (args.get(i) instanceof String && isConvertedParam(paramTypes[i])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isConvertedParam(Class<?> paramType) {
+        return DFC_TIME_IFACE.equals(paramType.getName()) || DFC_ID_IFACE.equals(paramType.getName());
+    }
+
+    private String argTypeNames(List<Object> args) {
+        List<String> names = new ArrayList<>();
+        for (Object arg : args) {
+            names.add(arg != null ? arg.getClass().getSimpleName() : "null");
+        }
+        return String.join(", ", names);
+    }
+
+    private Object toResultValue(Object result) throws Exception {
+        if (result == null || result instanceof String || result instanceof Boolean || result instanceof Number) {
+            return result;
+        }
+        Class<?> collectionClass = loadDfcClass(DFC_COLLECTION_IFACE);
+        try {
+            return result.toString();
+        } finally {
+            if (collectionClass != null && collectionClass.isInstance(result)) {
+                collectionClass.getMethod("close").invoke(result);
+            }
+        }
+    }
+
+    private Class<?> loadDfcClass(String className) {
+        try {
+            return Class.forName(className);
+        } catch (ClassNotFoundException e) {
+            return null;
+        }
     }
 
     private Object[] convertArgs(Class<?>[] paramTypes, List<Object> args) throws Exception {
