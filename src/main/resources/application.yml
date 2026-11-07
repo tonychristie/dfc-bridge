@@ -9,6 +9,9 @@ spring:
     name: dfc-bridge
   main:
     banner-mode: off
+  jackson:
+    deserialization:
+      fail-on-null-for-primitives: false
 
 # DFC Bridge Configuration
 dfc:

@@ -18,7 +18,7 @@ This guide covers deploying DFC Bridge with a full DFC installation for producti
 
 ### Java
 
-- **Java 17+** required (Java 11+ may work with pom.xml adjustments)
+- **Java 17+** required
 - Verify installation: `java -version`
 
 ### Maven (for building)
