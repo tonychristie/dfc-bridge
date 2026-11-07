@@ -219,6 +219,23 @@ DFC_HOME=/path/to/dfc/shared ./start-dfc-bridge.sh
 ./start-dfc-bridge.sh --port=8080
 ```
 
+On Windows, from a Command Prompt:
+
+```bat
+:: DFC mode (default)
+start-dfc-bridge.cmd
+
+:: Specify DFC location
+set DFC_HOME=C:\path\to\dfc\shared
+start-dfc-bridge.cmd
+
+:: Development mode (no DFC)
+start-dfc-bridge.cmd --mode=nodfc
+
+:: Custom port
+start-dfc-bridge.cmd --port=8080
+```
+
 ### Manual Invocation
 
 The bridge writes `logs/` under its working directory.
@@ -377,6 +394,7 @@ Expected response when DFC is available:
 2. **dmcl.ini:** May be required in `%DOCUMENTUM%\config`
 3. **Environment variables:** Set via System Properties or batch file
 4. **Service deployment:** Use NSSM or Windows Service wrapper
+5. **Startup script:** `start-dfc-bridge.cmd` starts the bridge. `start-dfc-bridge.ps1` must stay in the same folder as it
 
 ### Linux / WSL
 
