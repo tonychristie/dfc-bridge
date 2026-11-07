@@ -1,8 +1,10 @@
 package com.spirecentral.dfcbridge.model;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -25,9 +27,25 @@ class GroupInfoTest {
 
         assertTrue(json.get("isPrivate").asBoolean());
         assertTrue(json.get("isDynamic").asBoolean());
-        assertEquals("dmadmin", json.get("ownerName").asText());
-        assertEquals("docu@example.com", json.get("groupAddress").asText());
-        assertEquals("LDAP", json.get("groupSource").asText());
+        assertEquals("dmadmin", json.get("ownerName").asString());
+        assertEquals("docu@example.com", json.get("groupAddress").asString());
+        assertEquals("LDAP", json.get("groupSource").asString());
+    }
+
+    @Test
+    void testJsonFieldNamesAreTheDeclaredProperties() {
+        GroupInfo group = GroupInfo.builder()
+                .groupName("docu")
+                .isPrivate(true)
+                .isDynamic(true)
+                .build();
+
+        JsonNode json = mapper.valueToTree(group);
+
+        assertEquals(Set.of("objectId", "groupName", "description", "groupClass", "groupAdmin",
+                        "isPrivate", "isDynamic", "ownerName", "groupAddress", "groupSource",
+                        "usersNames", "groupsNames"),
+                Set.copyOf(json.propertyNames()));
     }
 
     @Test

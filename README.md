@@ -32,7 +32,7 @@ Client Application (e.g., VS Code Extension)
 
 ## Prerequisites
 
-- **Java 17+** (or Java 11+ with minor pom.xml adjustments)
+- **Java 17+**
 - **Maven 3.8+**
 - **DFC JARs** from a Documentum installation (only 5 JARs required):
   - `dfc.jar` - Core DFC library

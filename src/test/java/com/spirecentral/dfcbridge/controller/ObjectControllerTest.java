@@ -2,7 +2,6 @@ package com.spirecentral.dfcbridge.controller;
 
 import com.documentum.fc.client.DfAuthenticationException;
 import com.documentum.fc.common.DfException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.spirecentral.dfcbridge.dto.ApiRequest;
 import com.spirecentral.dfcbridge.dto.ApiResponse;
 import com.spirecentral.dfcbridge.dto.DmApiRequest;
@@ -16,18 +15,21 @@ import com.spirecentral.dfcbridge.model.TypeInfo;
 import com.spirecentral.dfcbridge.service.DmApiService;
 import com.spirecentral.dfcbridge.service.ObjectService;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -42,10 +44,10 @@ class ObjectControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @MockBean
+    @MockitoBean
     private ObjectService objectService;
 
-    @MockBean
+    @MockitoBean
     private DmApiService dmApiService;
 
     // Tests for getObject endpoint
@@ -129,6 +131,21 @@ class ObjectControllerTest {
                 .andExpect(jsonPath("$.name").value("renamed_document.pdf"));
 
         verify(objectService).updateObject(eq("session-123"), eq("0900000180000001"), any(UpdateObjectRequest.class));
+    }
+
+    @Test
+    void testUpdateObject_OmittedSaveDefaultsToTrue() throws Exception {
+        when(objectService.updateObject(eq("session-123"), eq("0900000180000001"), any(UpdateObjectRequest.class)))
+                .thenReturn(ObjectInfo.builder().objectId("0900000180000001").build());
+
+        mockMvc.perform(post("/api/v1/objects/0900000180000001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sessionId\":\"session-123\",\"attributes\":{\"title\":\"new title\"}}"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<UpdateObjectRequest> captor = ArgumentCaptor.forClass(UpdateObjectRequest.class);
+        verify(objectService).updateObject(eq("session-123"), eq("0900000180000001"), captor.capture());
+        assertTrue(captor.getValue().isSave());
     }
 
     // Tests for listFolderContents endpoint

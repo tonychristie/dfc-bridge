@@ -1,5 +1,6 @@
 package com.spirecentral.dfcbridge.model;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -15,6 +16,7 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonAutoDetect(isGetterVisibility = JsonAutoDetect.Visibility.NONE)
 public class GroupInfo {
 
     private String objectId;

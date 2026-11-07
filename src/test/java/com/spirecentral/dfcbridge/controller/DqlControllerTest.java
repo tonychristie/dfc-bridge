@@ -1,23 +1,26 @@
 package com.spirecentral.dfcbridge.controller;
 
 import com.documentum.fc.common.DfException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.spirecentral.dfcbridge.dto.DqlRequest;
 import com.spirecentral.dfcbridge.exception.DqlException;
 import com.spirecentral.dfcbridge.exception.SessionNotFoundException;
 import com.spirecentral.dfcbridge.model.QueryResult;
 import com.spirecentral.dfcbridge.service.DqlService;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -31,7 +34,7 @@ class DqlControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @MockBean
+    @MockitoBean
     private DqlService dqlService;
 
     @Test
@@ -124,5 +127,30 @@ class DqlControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void testExecuteQuery_OmittedPagingFieldsUseDefaults() throws Exception {
+        when(dqlService.executeQuery(any(DqlRequest.class)))
+                .thenReturn(QueryResult.builder().rows(List.of()).build());
+
+        mockMvc.perform(post("/api/v1/dql")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sessionId\":\"test-session-123\",\"query\":\"SELECT r_object_id FROM dm_cabinet\"}"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<DqlRequest> captor = ArgumentCaptor.forClass(DqlRequest.class);
+        verify(dqlService).executeQuery(captor.capture());
+        assertEquals(100, captor.getValue().getMaxRows());
+        assertEquals(0, captor.getValue().getStartRow());
+    }
+
+    @Test
+    void testExecuteQuery_NullMaxRowsIsValidationError() throws Exception {
+        mockMvc.perform(post("/api/v1/dql")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sessionId\":\"test-session-123\",\"query\":\"SELECT r_object_id FROM dm_cabinet\",\"maxRows\":null}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }
 }
