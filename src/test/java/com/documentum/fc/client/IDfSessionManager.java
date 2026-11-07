@@ -1,5 +1,6 @@
 package com.documentum.fc.client;
 
+import com.documentum.fc.common.DfException;
 import com.documentum.fc.common.IDfLoginInfo;
 
 /**
@@ -14,7 +15,7 @@ public interface IDfSessionManager {
 
     void setIdentity(String docbase, IDfLoginInfo loginInfo);
 
-    IDfSession getSession(String docbase);
+    IDfSession getSession(String docbase) throws DfException;
 
     void release(IDfSession session);
 }
