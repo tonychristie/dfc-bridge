@@ -1,14 +1,18 @@
 package com.spirecentral.dfcbridge.service.impl;
 
+import com.documentum.fc.client.DfAuthenticationException;
 import com.documentum.fc.client.DfClient;
 import com.documentum.fc.client.IDfSession;
 import com.documentum.fc.client.IDfSessionManager;
 import com.spirecentral.dfcbridge.dto.ConnectRequest;
+import com.spirecentral.dfcbridge.exception.ConnectionException;
 import com.spirecentral.dfcbridge.exception.SessionNotFoundException;
+import com.spirecentral.dfcbridge.model.SessionInfo;
 import com.spirecentral.dfcbridge.service.DfcAvailabilityService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
@@ -30,7 +34,7 @@ class DfcSessionServiceImplTest {
     private DfcSessionServiceImpl sessionService;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         sessionManager = mock(IDfSessionManager.class);
         dfSession = mock(IDfSession.class);
         when(sessionManager.getSession("TestRepo")).thenReturn(dfSession);
@@ -179,6 +183,58 @@ class DfcSessionServiceImplTest {
         assertFalse(workRan.get());
         assertThrows(SessionNotFoundException.class, () -> sessionService.getSessionInfo(sessionId));
         verify(sessionManager).release(dfSession);
+    }
+
+    @Test
+    void connect_returnsSessionIdForTheRequestedRepositoryAndUser() {
+        String sessionId = connect();
+
+        SessionInfo info = sessionService.getSessionInfo(sessionId);
+        assertEquals(sessionId, info.getSessionId());
+        assertEquals("TestRepo", info.getRepository());
+        assertEquals("dmadmin", info.getUser());
+    }
+
+    @Test
+    void connect_authenticationFails_throwsConnectionExceptionWith401() throws Exception {
+        when(sessionManager.getSession("TestRepo"))
+                .thenThrow(new DfAuthenticationException("DM_SESSION_E_AUTHENTICATION"));
+
+        ConnectionException e = assertThrows(ConnectionException.class, () -> connect());
+
+        assertEquals(HttpStatus.UNAUTHORIZED, e.getStatus());
+    }
+
+    @Test
+    void cleanupExpiredSessions_releasesIdleSessionAndKeepsActiveSession() throws Exception {
+        IDfSession activeDfSession = mock(IDfSession.class);
+        when(activeDfSession.isConnected()).thenReturn(true);
+        when(sessionManager.getSession("TestRepo")).thenReturn(dfSession, activeDfSession);
+        String idleSessionId = connect();
+        String activeSessionId = connect();
+        sessionService.getSessionInfo(idleSessionId).setLastActivity(Instant.now().minus(Duration.ofHours(1)));
+
+        sessionService.cleanupExpiredSessions();
+
+        verify(sessionManager).release(dfSession);
+        verify(sessionManager, never()).release(activeDfSession);
+        assertThrows(SessionNotFoundException.class, () -> sessionService.getSessionInfo(idleSessionId));
+        assertNotNull(sessionService.getSessionInfo(activeSessionId));
+    }
+
+    @Test
+    void shutdown_releasesEverySession() throws Exception {
+        IDfSession secondDfSession = mock(IDfSession.class);
+        when(sessionManager.getSession("TestRepo")).thenReturn(dfSession, secondDfSession);
+        String firstSessionId = connect();
+        String secondSessionId = connect();
+
+        sessionService.shutdown();
+
+        verify(sessionManager).release(dfSession);
+        verify(sessionManager).release(secondDfSession);
+        assertThrows(SessionNotFoundException.class, () -> sessionService.getSessionInfo(firstSessionId));
+        assertThrows(SessionNotFoundException.class, () -> sessionService.getSessionInfo(secondSessionId));
     }
 
     private String connect() {

@@ -54,4 +54,48 @@ class DqlServiceImplTest {
         assertTrue(result.isHasMore());
         assertTrue(collection.isClosed());
     }
+
+    @Test
+    void executeQuery_startRowOneMaxRowsOne_returnsSecondRowWithHasMore() {
+        QueryResult result = executeOverThreeRows(1, 1);
+
+        assertEquals(List.of(Map.of("object_name", "b")), result.getRows());
+        assertTrue(result.isHasMore());
+    }
+
+    @Test
+    void executeQuery_rowsExactlyFillMaxRows_returnsAllRowsWithoutHasMore() {
+        QueryResult result = executeOverThreeRows(0, 3);
+
+        assertEquals(List.of(Map.of("object_name", "a"), Map.of("object_name", "b"), Map.of("object_name", "c")),
+                result.getRows());
+        assertFalse(result.isHasMore());
+    }
+
+    @Test
+    void executeQuery_startRowPastLastRow_returnsNoRowsWithoutHasMore() {
+        QueryResult result = executeOverThreeRows(5, 2);
+
+        assertEquals(List.of(), result.getRows());
+        assertFalse(result.isHasMore());
+    }
+
+    private QueryResult executeOverThreeRows(int startRow, int maxRows) {
+        RowCollection collection = new RowCollection(
+                Map.of("object_name", "a"),
+                Map.of("object_name", "b"),
+                Map.of("object_name", "c"))
+                .column("object_name", 2, false);
+        DfQuery.reset(dql -> collection);
+        when(sessionService.withSession(eq("test-session"), any())).thenAnswer(
+                invocation -> invocation.<Function<Object, Object>>getArgument(1).apply(null));
+        DqlRequest request = DqlRequest.builder()
+                .sessionId("test-session")
+                .query("SELECT object_name FROM dm_document")
+                .startRow(startRow)
+                .maxRows(maxRows)
+                .build();
+
+        return new DqlServiceImpl(sessionService).executeQuery(request);
+    }
 }

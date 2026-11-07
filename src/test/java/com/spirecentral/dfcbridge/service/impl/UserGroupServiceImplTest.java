@@ -1,6 +1,7 @@
 package com.spirecentral.dfcbridge.service.impl;
 
 import com.documentum.fc.client.DfQuery;
+import com.spirecentral.dfcbridge.exception.GroupNotFoundException;
 import com.spirecentral.dfcbridge.exception.UserNotFoundException;
 import com.spirecentral.dfcbridge.model.GroupInfo;
 import com.spirecentral.dfcbridge.model.UserInfo;
@@ -125,6 +126,25 @@ class UserGroupServiceImplTest {
         assertEquals("docu", group.getGroupName());
         assertEquals(List.of("test01", "test02"), group.getUsersNames());
         assertEquals(List.of("admingroup"), group.getGroupsNames());
+    }
+
+    @Test
+    void getGroup_noRow_throwsGroupNotFound() {
+        DfQuery.reset(dql -> new RowCollection());
+
+        assertThrows(GroupNotFoundException.class, () -> userGroupService.getGroup("test-session", "nogroup"));
+    }
+
+    @Test
+    void getGroupsForUser_queriesUsersNamesWithQuoteDoubled_mapsEachRow() {
+        DfQuery.reset(dql -> new RowCollection(groupRow("docu", false, false), groupRow("admingroup", false, false)));
+
+        List<GroupInfo> groups = userGroupService.getGroupsForUser("test-session", "o'brien");
+
+        assertTrue(DfQuery.executed.get(0).contains("WHERE ANY users_names = 'o''brien'"));
+        assertEquals(2, groups.size());
+        assertEquals("docu", groups.get(0).getGroupName());
+        assertEquals("admingroup", groups.get(1).getGroupName());
     }
 
     private Map<String, Object> userRow(String userName, int privileges) {
