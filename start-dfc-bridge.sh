@@ -83,7 +83,7 @@ verify_dfc_setup() {
             echo "  [OK] $jar ($size)"
         else
             echo "  [MISSING] $jar"
-            ((errors++))
+            errors=$((errors + 1))
         fi
     done
 
@@ -97,7 +97,7 @@ verify_dfc_setup() {
         done
     else
         echo "  [MISSING] No log4j*.jar files found"
-        ((errors++))
+        errors=$((errors + 1))
     fi
 
     echo ""
@@ -105,7 +105,7 @@ verify_dfc_setup() {
     # Check DFC_CONFIG
     if [ ! -d "$DFC_CONFIG" ]; then
         echo "[ERROR] DFC_CONFIG directory not found: $DFC_CONFIG"
-        ((errors++))
+        errors=$((errors + 1))
     elif [ ! -f "$DFC_CONFIG/dfc.properties" ]; then
         echo "[WARNING] dfc.properties not found in $DFC_CONFIG"
         echo "  You may need to create this file with docbroker settings."
