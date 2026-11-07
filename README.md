@@ -107,6 +107,17 @@ The script also runs from the unzipped release bundle, where it uses the JAR bes
 | `SERVER_PORT` | Server port | 9876 |
 | `SERVER_ADDRESS` | Address the server listens on | 127.0.0.1 |
 
+#### On Windows
+
+Run `start-dfc-bridge.cmd` from a Command Prompt or PowerShell window. It takes the same options and environment variables as `start-dfc-bridge.sh`.
+
+```bat
+start-dfc-bridge.cmd
+start-dfc-bridge.cmd --mode=nodfc --port=8080
+```
+
+To set an environment variable, use `set DFC_HOME=C:\Documentum\shared` in a Command Prompt or `$env:DFC_HOME = "C:\Documentum\shared"` in PowerShell.
+
 ### Alternative: Manual Java Invocation
 
 If you prefer not to use the startup script:
