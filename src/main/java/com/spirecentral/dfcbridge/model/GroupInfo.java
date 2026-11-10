@@ -16,7 +16,9 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@JsonAutoDetect(isGetterVisibility = JsonAutoDetect.Visibility.NONE)
+@JsonAutoDetect(
+        isGetterVisibility = JsonAutoDetect.Visibility.NONE,
+        setterVisibility = JsonAutoDetect.Visibility.NONE)
 public class GroupInfo {
 
     private String objectId;
