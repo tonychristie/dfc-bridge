@@ -12,6 +12,9 @@ spring:
   jackson:
     deserialization:
       fail-on-null-for-primitives: false
+  web:
+    resources:
+      add-mappings: false
 
 # DFC Bridge Configuration
 dfc:
