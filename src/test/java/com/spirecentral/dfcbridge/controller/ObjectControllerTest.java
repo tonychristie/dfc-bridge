@@ -4,6 +4,7 @@ import com.documentum.fc.client.DfAuthenticationException;
 import com.documentum.fc.common.DfException;
 import com.spirecentral.dfcbridge.dto.ApiRequest;
 import com.spirecentral.dfcbridge.dto.ApiResponse;
+import com.spirecentral.dfcbridge.dto.CreateObjectRequest;
 import com.spirecentral.dfcbridge.dto.DmApiRequest;
 import com.spirecentral.dfcbridge.dto.UpdateObjectRequest;
 import com.spirecentral.dfcbridge.exception.DfcBridgeException;
@@ -29,6 +30,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -533,5 +535,134 @@ class ObjectControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void testCreateObject_Success() throws Exception {
+        Map<String, Object> attributes = new HashMap<>();
+        attributes.put("title", "Quarterly report");
+
+        CreateObjectRequest request = CreateObjectRequest.builder()
+                .sessionId("session-123")
+                .objectType("dm_document")
+                .objectName("report.pdf")
+                .folderPath("/Temp")
+                .attributes(attributes)
+                .build();
+
+        ObjectInfo createdInfo = ObjectInfo.builder()
+                .objectId("0900000180000002")
+                .type("dm_document")
+                .name("report.pdf")
+                .build();
+
+        when(objectService.createObject(eq("session-123"), any(CreateObjectRequest.class)))
+                .thenReturn(createdInfo);
+
+        mockMvc.perform(post("/api/v1/objects")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.objectId").value("0900000180000002"))
+                .andExpect(jsonPath("$.type").value("dm_document"))
+                .andExpect(jsonPath("$.name").value("report.pdf"));
+
+        ArgumentCaptor<CreateObjectRequest> captor = ArgumentCaptor.forClass(CreateObjectRequest.class);
+        verify(objectService).createObject(eq("session-123"), captor.capture());
+        assertEquals(request, captor.getValue());
+    }
+
+    @Test
+    void testCreateObject_MissingSessionId() throws Exception {
+        CreateObjectRequest request = CreateObjectRequest.builder()
+                .objectType("dm_document")
+                .objectName("report.pdf")
+                .build();
+
+        mockMvc.perform(post("/api/v1/objects")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+
+        verify(objectService, never()).createObject(any(), any());
+    }
+
+    @Test
+    void testCreateObject_BlankObjectType() throws Exception {
+        CreateObjectRequest request = CreateObjectRequest.builder()
+                .sessionId("session-123")
+                .objectType("")
+                .objectName("report.pdf")
+                .build();
+
+        mockMvc.perform(post("/api/v1/objects")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+
+        verify(objectService, never()).createObject(any(), any());
+    }
+
+    @Test
+    void testCheckin_DefaultVersionLabel() throws Exception {
+        ObjectInfo newVersion = ObjectInfo.builder()
+                .objectId("0900000180000003")
+                .type("dm_document")
+                .name("report.pdf")
+                .build();
+
+        when(objectService.checkin("session-123", "0900000180000001", "CURRENT")).thenReturn(newVersion);
+
+        mockMvc.perform(post("/api/v1/objects/0900000180000001/versions")
+                        .param("sessionId", "session-123"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.objectId").value("0900000180000003"))
+                .andExpect(jsonPath("$.name").value("report.pdf"));
+
+        verify(objectService).checkin("session-123", "0900000180000001", "CURRENT");
+    }
+
+    @Test
+    void testCheckin_WithVersionLabel() throws Exception {
+        when(objectService.checkin("session-123", "0900000180000001", "1.1"))
+                .thenReturn(ObjectInfo.builder().objectId("0900000180000003").build());
+
+        mockMvc.perform(post("/api/v1/objects/0900000180000001/versions")
+                        .param("sessionId", "session-123")
+                        .param("versionLabel", "1.1"))
+                .andExpect(status().isOk());
+
+        verify(objectService).checkin("session-123", "0900000180000001", "1.1");
+    }
+
+    @Test
+    void testCheckout_Success() throws Exception {
+        ObjectInfo lockedInfo = ObjectInfo.builder()
+                .objectId("0900000180000001")
+                .type("dm_document")
+                .name("report.pdf")
+                .build();
+
+        when(objectService.checkout("session-123", "0900000180000001")).thenReturn(lockedInfo);
+
+        mockMvc.perform(put("/api/v1/objects/0900000180000001/lock")
+                        .param("sessionId", "session-123"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.objectId").value("0900000180000001"))
+                .andExpect(jsonPath("$.name").value("report.pdf"));
+
+        verify(objectService).checkout("session-123", "0900000180000001");
+    }
+
+    @Test
+    void testCancelCheckout_Success() throws Exception {
+        mockMvc.perform(delete("/api/v1/objects/0900000180000001/lock")
+                        .param("sessionId", "session-123"))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+
+        verify(objectService).cancelCheckout("session-123", "0900000180000001");
     }
 }
