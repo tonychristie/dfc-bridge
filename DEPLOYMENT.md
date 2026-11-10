@@ -164,7 +164,7 @@ DFC has specific classpath requirements. The order matters:
 
 1. **DFC log4j JARs first** - DFC's log4j must load before Spring Boot's
 2. **DFC config directory** - Contains dfc.properties
-3. **DFC libraries** - All other DFC JARs
+3. **DFC libraries** - All other DFC JARs except `servlet-api.jar`. The `servlet-api.jar` in a Documentum `shared` folder is an older Servlet API than the one the embedded Tomcat needs, and it breaks Tomcat's error page.
 4. **Application classes** - DFC Bridge code
 5. **Spring Boot libraries** - Framework dependencies
 
@@ -185,6 +185,7 @@ DFC_CP="$DFC_HOME/log4j.jar:$DFC_HOME/log4j-1.2-api-2.17.1.jar"
 for jar in $DFC_HOME/*.jar; do
     case "$jar" in
         *log4j*) ;;  # Skip, already added
+        */servlet-api*.jar) ;;  # Skip, older Servlet API than Tomcat's
         *) DFC_CP="$DFC_CP:$jar" ;;
     esac
 done
@@ -250,7 +251,7 @@ for jar in $DFC_HOME/log4j*.jar; do
     DFC_CP="$DFC_CP:$jar"
 done
 for jar in $DFC_HOME/*.jar; do
-    case "$jar" in *log4j*) ;; *) DFC_CP="$DFC_CP:$jar" ;; esac
+    case "$jar" in *log4j*|*/servlet-api*.jar) ;; *) DFC_CP="$DFC_CP:$jar" ;; esac
 done
 
 # Build boot classpath (exclude log4j-to-slf4j)
