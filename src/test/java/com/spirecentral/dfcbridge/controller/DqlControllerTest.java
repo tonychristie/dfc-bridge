@@ -21,6 +21,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -152,5 +153,37 @@ class DqlControllerTest {
                         .content("{\"sessionId\":\"test-session-123\",\"query\":\"SELECT r_object_id FROM dm_cabinet\",\"maxRows\":null}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void testExecuteQuery_MalformedJson_Returns400() throws Exception {
+        mockMvc.perform(post("/api/v1/dql")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{bad"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+
+        verifyNoInteractions(dqlService);
+    }
+
+    @Test
+    void testExecuteQuery_NoBody_Returns400() throws Exception {
+        mockMvc.perform(post("/api/v1/dql")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+
+        verifyNoInteractions(dqlService);
+    }
+
+    @Test
+    void testExecuteQuery_TextPlainBody_Returns415() throws Exception {
+        mockMvc.perform(post("/api/v1/dql")
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("SELECT r_object_id FROM dm_cabinet"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.code").value("UNSUPPORTED_MEDIA_TYPE"));
+
+        verifyNoInteractions(dqlService);
     }
 }

@@ -97,6 +97,21 @@ class SessionControllerTest {
     }
 
     @Test
+    void testConnect_ValidationError_AcceptXml_ReturnsJson() throws Exception {
+        ConnectRequest request = ConnectRequest.builder()
+                .port(1489)
+                .build();
+
+        mockMvc.perform(post("/api/v1/connect")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_XML)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
     void testDisconnect_Success() throws Exception {
         DisconnectRequest request = DisconnectRequest.builder()
                 .sessionId("test-session-123")

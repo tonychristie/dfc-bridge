@@ -665,4 +665,99 @@ class ObjectControllerTest {
 
         verify(objectService).cancelCheckout("session-123", "0900000180000001");
     }
+
+    // Tests for Spring MVC request errors
+
+    @Test
+    void testGetCabinets_MissingSessionId_Returns400() throws Exception {
+        mockMvc.perform(get("/api/v1/cabinets"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+
+        verifyNoInteractions(objectService);
+    }
+
+    @Test
+    void testDeleteObject_InvalidAllVersions_Returns400() throws Exception {
+        mockMvc.perform(delete("/api/v1/objects/0900000180000001")
+                        .param("sessionId", "session-123")
+                        .param("allVersions", "maybe"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+
+        verifyNoInteractions(objectService);
+    }
+
+    @Test
+    void testPatchObject_Returns405() throws Exception {
+        mockMvc.perform(patch("/api/v1/objects/0900000180000001")
+                        .param("sessionId", "session-123"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"));
+    }
+
+    @Test
+    void testUnknownPath_Returns404() throws Exception {
+        mockMvc.perform(get("/api/v1/nothing"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+    }
+
+    // Tests for error responses when Accept refuses JSON
+
+    @Test
+    void testGetObject_NotFound_AcceptXml_ReturnsJson() throws Exception {
+        when(objectService.getObject("session-123", "0900000180000001"))
+                .thenThrow(new ObjectNotFoundException("0900000180000001"));
+
+        mockMvc.perform(get("/api/v1/objects/0900000180000001")
+                        .param("sessionId", "session-123")
+                        .accept(MediaType.APPLICATION_XML))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value("OBJECT_NOT_FOUND"));
+    }
+
+    @Test
+    void testGetObject_UnexpectedError_AcceptXml_ReturnsJson() throws Exception {
+        when(objectService.getObject("session-123", "0900000180000001"))
+                .thenThrow(new IllegalStateException("unexpected"));
+
+        mockMvc.perform(get("/api/v1/objects/0900000180000001")
+                        .param("sessionId", "session-123")
+                        .accept(MediaType.APPLICATION_XML))
+                .andExpect(status().isInternalServerError())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"));
+    }
+
+    @Test
+    void testGetCabinets_MissingSessionId_AcceptXml_ReturnsJson() throws Exception {
+        mockMvc.perform(get("/api/v1/cabinets")
+                        .accept(MediaType.APPLICATION_XML))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void testGetCabinets_AcceptXml_Returns406() throws Exception {
+        when(objectService.getCabinets("session-123")).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/cabinets")
+                        .param("sessionId", "session-123")
+                        .accept(MediaType.APPLICATION_XML))
+                .andExpect(status().isNotAcceptable())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value("NOT_ACCEPTABLE"));
+    }
+
+    @Test
+    void testUnknownPath_AcceptXml_ReturnsJson() throws Exception {
+        mockMvc.perform(get("/api/v1/nothing")
+                        .accept(MediaType.APPLICATION_XML))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+    }
 }
