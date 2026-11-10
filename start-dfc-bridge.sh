@@ -251,11 +251,13 @@ build_dfc_classpath() {
         fi
     done
 
-    # Add remaining DFC jars (skip log4j, already added)
+    # Add remaining DFC jars (skip log4j, already added, and the Documentum
+    # servlet-api.jar, an older Servlet API than the embedded Tomcat's)
     for jar in "$DFC_HOME"/*.jar; do
         [ -e "$jar" ] || continue
         case "$jar" in
             *log4j*) continue ;;
+            */servlet-api*.jar) continue ;;
         esac
         if [ -z "$DFC_CP" ]; then
             DFC_CP="$jar"

@@ -277,9 +277,10 @@ function Get-DfcClasspath {
         $entries += $jar.FullName
     }
 
-    # Add remaining DFC jars (skip log4j, already added)
+    # Add remaining DFC jars (skip log4j, already added, and the Documentum
+    # servlet-api.jar, an older Servlet API than the embedded Tomcat's)
     foreach ($jar in (Get-Jars $DfcHome '*.jar')) {
-        if ($jar.Name -like '*log4j*') {
+        if ($jar.Name -like '*log4j*' -or $jar.Name -like 'servlet-api*.jar') {
             continue
         }
         $entries += $jar.FullName
