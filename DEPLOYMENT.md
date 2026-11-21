@@ -161,7 +161,7 @@ Each DFC instance has its own classloader over every JAR in `--dfc.home` except 
 For each new docbroker host and port, the bridge writes `dfc-instances/<host>_<port>/` in its working directory (`run/` under the startup scripts):
 
 - `config/dfc.properties`: every setting of `<dfc.config>/dfc.properties` except the `dfc.docbroker.*` entries and `dfc.data.dir`, plus the requested docbroker and `dfc.data.dir` set to the `data` folder
-- `config/dfc.keystore`: a copy of `<dfc.config>/dfc.keystore`, when it exists
+- `config/`: a copy of every other file of `<dfc.config>`, such as `dfc.keystore` and `log4j2.properties`
 - `data/`: the DFC data folder of that instance
 
 In the folder name, any character of the host that is not a letter, a digit, `.` or `-` becomes `_`. The `config` folder is written again the first time the bridge connects through that docbroker after a start, so a change to `<dfc.config>` takes effect on the next start. The `data` folder is kept between restarts. An instance stays loaded until the bridge stops, including one created by a connect that failed.

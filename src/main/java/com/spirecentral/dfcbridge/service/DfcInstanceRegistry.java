@@ -33,7 +33,6 @@ public class DfcInstanceRegistry {
     private static final Logger log = LoggerFactory.getLogger(DfcInstanceRegistry.class);
 
     private static final String DFC_PROPERTIES = "dfc.properties";
-    private static final String DFC_KEYSTORE = "dfc.keystore";
     private static final String DOCBROKER_PREFIX = "dfc.docbroker.";
     private static final String DATA_DIR = "dfc.data.dir";
 
@@ -66,7 +65,7 @@ public class DfcInstanceRegistry {
             Files.createDirectories(configDir);
             Files.createDirectories(dataDir);
             writeDfcProperties(configDir, dataDir, host, port);
-            copyKeystore(configDir);
+            copyConfigFiles(configDir);
 
             List<URL> urls = new ArrayList<>();
             urls.add(configDir.toUri().toURL());
@@ -99,10 +98,19 @@ public class DfcInstanceRegistry {
         }
     }
 
-    private void copyKeystore(Path configDir) throws IOException {
-        Optional<Path> keystore = configFile(DFC_KEYSTORE);
-        if (keystore.isPresent()) {
-            Files.copy(keystore.get(), configDir.resolve(DFC_KEYSTORE), StandardCopyOption.REPLACE_EXISTING);
+    private void copyConfigFiles(Path configDir) throws IOException {
+        if (dfcConfig.isBlank() || !Files.isDirectory(Path.of(dfcConfig))) {
+            return;
+        }
+        List<Path> files;
+        try (Stream<Path> listing = Files.list(Path.of(dfcConfig))) {
+            files = listing
+                    .filter(Files::isRegularFile)
+                    .filter(file -> !file.getFileName().toString().equals(DFC_PROPERTIES))
+                    .toList();
+        }
+        for (Path file : files) {
+            Files.copy(file, configDir.resolve(file.getFileName().toString()), StandardCopyOption.REPLACE_EXISTING);
         }
     }
 

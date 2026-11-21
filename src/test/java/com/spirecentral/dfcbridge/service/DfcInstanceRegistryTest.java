@@ -92,6 +92,16 @@ class DfcInstanceRegistryTest {
     }
 
     @Test
+    void loaderFor_copiesTheLog4jConfigurationIntoTheInstanceConfig() throws IOException {
+        Files.writeString(dfcConfig.resolve("log4j2.properties"), "rootLogger.level=info\n");
+
+        registry.loaderFor("cs23", 1489);
+
+        assertEquals("rootLogger.level=info\n",
+                Files.readString(instancesDir.resolve("cs23_1489/config/log4j2.properties")));
+    }
+
+    @Test
     void loaderFor_sameHostAndPort_returnsTheSameLoader() {
         assertSame(registry.loaderFor("cs23", 1489), registry.loaderFor("cs23", 1489));
     }
