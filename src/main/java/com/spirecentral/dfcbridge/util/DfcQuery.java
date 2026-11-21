@@ -53,7 +53,7 @@ public final class DfcQuery {
         Object query = DfcReflection.newInstance(DFC_QUERY_CLASS);
         DfcReflection.invoke(query, "setDQL", STRING_PARAM, dql);
         Object collection = DfcReflection.invoke(DFC_QUERY_IFACE, query, "execute",
-                new Class<?>[]{Class.forName(DFC_SESSION_IFACE), int.class}, dfSession, DF_READ_QUERY);
+                new Class<?>[]{DfcReflection.dfcClass(DFC_SESSION_IFACE), int.class}, dfSession, DF_READ_QUERY);
         try {
             while ((Boolean) DfcReflection.invoke(collection, "next")) {
                 if (!reader.read(collection)) {

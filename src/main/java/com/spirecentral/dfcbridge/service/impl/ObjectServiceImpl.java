@@ -268,7 +268,7 @@ public class ObjectServiceImpl implements ObjectService {
         return sessionService.withSession(sessionId, dfSession -> {
             try {
                 Object folder = getObjectById(dfSession, folderId);
-                if (!Class.forName(DFC_FOLDER_IFACE).isInstance(folder)) {
+                if (!DfcReflection.dfcClass(DFC_FOLDER_IFACE).isInstance(folder)) {
                     throw new ObjectNotFoundException("Folder not found: " + folderId);
                 }
 
@@ -430,7 +430,7 @@ public class ObjectServiceImpl implements ObjectService {
 
         try {
             return DfcReflection.invoke(DFC_SESSION_IFACE, dfSession, "getObject",
-                    new Class<?>[]{Class.forName(DFC_ID_IFACE)}, dfId);
+                    new Class<?>[]{DfcReflection.dfcClass(DFC_ID_IFACE)}, dfId);
         } catch (InvocationTargetException e) {
             if (DfcExceptionUtils.isInstanceOf(e.getTargetException(), DfcExceptionUtils.DFC_ID_NOT_FOUND_EXCEPTION)) {
                 throw new ObjectNotFoundException(objectId);
@@ -821,7 +821,7 @@ public class ObjectServiceImpl implements ObjectService {
 
     private Class<?> loadDfcClass(String className) {
         try {
-            return Class.forName(className);
+            return DfcReflection.dfcClass(className);
         } catch (ClassNotFoundException e) {
             return null;
         }

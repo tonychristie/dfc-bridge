@@ -4,17 +4,23 @@ import com.documentum.fc.client.DfAuthenticationException;
 import com.documentum.fc.client.DfClient;
 import com.documentum.fc.client.IDfSession;
 import com.documentum.fc.client.IDfSessionManager;
+import com.documentum.fc.client.IDfTypedObject;
+import com.documentum.fc.common.DfException;
 import com.spirecentral.dfcbridge.dto.ConnectRequest;
+import com.spirecentral.dfcbridge.dto.ConnectResponse;
 import com.spirecentral.dfcbridge.exception.ConnectionException;
 import com.spirecentral.dfcbridge.exception.SessionNotFoundException;
 import com.spirecentral.dfcbridge.model.SessionInfo;
 import com.spirecentral.dfcbridge.service.DfcAvailabilityService;
+import com.spirecentral.dfcbridge.service.DfcInstanceRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -31,6 +37,8 @@ class DfcSessionServiceImplTest {
 
     private IDfSessionManager sessionManager;
     private IDfSession dfSession;
+    private DfcInstanceRegistry dfcInstances;
+    private URLClassLoader dfcLoader;
     private DfcSessionServiceImpl sessionService;
 
     @BeforeEach
@@ -41,13 +49,150 @@ class DfcSessionServiceImplTest {
         when(dfSession.isConnected()).thenReturn(true);
         DfClient.sessionManager = sessionManager;
 
-        sessionService = new DfcSessionServiceImpl(mock(DfcAvailabilityService.class));
+        // a child of the test classloader, so that it finds the DFC stubs and can be told apart from it
+        dfcLoader = new URLClassLoader(new URL[0], getClass().getClassLoader());
+        dfcInstances = mock(DfcInstanceRegistry.class);
+        when(dfcInstances.loaderFor(anyString(), anyInt())).thenReturn(dfcLoader);
+
+        sessionService = new DfcSessionServiceImpl(mock(DfcAvailabilityService.class), dfcInstances);
         ReflectionTestUtils.setField(sessionService, "sessionTimeoutMinutes", 30);
     }
 
     @AfterEach
-    void tearDown() {
+    void tearDown() throws Exception {
         DfClient.sessionManager = null;
+        dfcLoader.close();
+    }
+
+    @Test
+    void connect_usesTheLoaderOfTheRequestedDocbrokerAndPort() throws Exception {
+        AtomicReference<ClassLoader> loaderAtGetSession = new AtomicReference<>();
+        when(sessionManager.getSession("TestRepo")).thenAnswer(invocation -> {
+            loaderAtGetSession.set(Thread.currentThread().getContextClassLoader());
+            return dfSession;
+        });
+        ClassLoader previous = Thread.currentThread().getContextClassLoader();
+
+        sessionService.connect(ConnectRequest.builder()
+                .docbroker("192.168.0.111")
+                .port(1490)
+                .repository("TestRepo")
+                .username("dmadmin")
+                .password("password")
+                .build());
+
+        verify(dfcInstances).loaderFor("192.168.0.111", 1490);
+        assertSame(dfcLoader, loaderAtGetSession.get());
+        assertSame(previous, Thread.currentThread().getContextClassLoader());
+    }
+
+    @Test
+    void connect_reportsTheRequestedDocbrokerAndTheHostOfTheServer() throws Exception {
+        IDfTypedObject serverConfig = mock(IDfTypedObject.class);
+        when(serverConfig.getString("r_host_name")).thenReturn("cs23-tst");
+        when(dfSession.getServerConfig()).thenReturn(serverConfig);
+
+        ConnectResponse response = sessionService.connect(ConnectRequest.builder()
+                .docbroker("192.168.0.111")
+                .port(1490)
+                .repository("TestRepo")
+                .username("dmadmin")
+                .password("password")
+                .build());
+
+        SessionInfo info = sessionService.getSessionInfo(response.getSessionId());
+        assertEquals("192.168.0.111", info.getDocbroker());
+        assertEquals(1490, info.getPort());
+        assertEquals("cs23-tst", response.getRepositoryInfo().getContentServerHost());
+    }
+
+    @Test
+    void connect_repositoryInfoCannotBeRead_leavesContentServerHostEmpty() throws Exception {
+        when(dfSession.getServerConfig()).thenThrow(new DfException("DM_API_E_NO_SERVER_CONFIG"));
+
+        ConnectResponse response = sessionService.connect(ConnectRequest.builder()
+                .docbroker("192.168.0.111")
+                .repository("TestRepo")
+                .username("dmadmin")
+                .password("password")
+                .build());
+
+        assertNull(response.getRepositoryInfo().getContentServerHost());
+    }
+
+    @Test
+    void connect_blankDocbroker_throwsConnectionExceptionWith400() {
+        ConnectionException e = assertThrows(ConnectionException.class, () -> sessionService.connect(
+                ConnectRequest.builder()
+                        .docbroker(" ")
+                        .repository("TestRepo")
+                        .username("dmadmin")
+                        .password("password")
+                        .build()));
+
+        assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
+        verifyNoInteractions(dfcInstances);
+    }
+
+    @Test
+    void withSession_runsWorkWithTheSessionLoaderAndRestoresThePreviousLoader() {
+        String sessionId = connect();
+        ClassLoader previous = Thread.currentThread().getContextClassLoader();
+
+        ClassLoader loaderInWork = sessionService.withSession(sessionId,
+                s -> Thread.currentThread().getContextClassLoader());
+
+        assertSame(dfcLoader, loaderInWork);
+        assertSame(previous, Thread.currentThread().getContextClassLoader());
+    }
+
+    @Test
+    void withSession_workThrows_restoresThePreviousLoader() {
+        String sessionId = connect();
+        ClassLoader previous = Thread.currentThread().getContextClassLoader();
+
+        assertThrows(IllegalStateException.class, () -> sessionService.withSession(sessionId, s -> {
+            throw new IllegalStateException("work failed");
+        }));
+
+        assertSame(previous, Thread.currentThread().getContextClassLoader());
+    }
+
+    @Test
+    void isSessionValid_checksTheDfcSessionWithTheSessionLoader() {
+        String sessionId = connect();
+        AtomicReference<ClassLoader> loaderAtIsConnected = recordLoaderAtIsConnected();
+        ClassLoader previous = Thread.currentThread().getContextClassLoader();
+
+        assertTrue(sessionService.isSessionValid(sessionId));
+
+        assertSame(dfcLoader, loaderAtIsConnected.get());
+        assertSame(previous, Thread.currentThread().getContextClassLoader());
+    }
+
+    @Test
+    void disconnect_releasesTheDfcSessionWithTheSessionLoader() {
+        String sessionId = connect();
+        AtomicReference<ClassLoader> loaderAtRelease = recordLoaderAtRelease();
+        ClassLoader previous = Thread.currentThread().getContextClassLoader();
+
+        sessionService.disconnect(sessionId);
+
+        assertSame(dfcLoader, loaderAtRelease.get());
+        assertSame(previous, Thread.currentThread().getContextClassLoader());
+    }
+
+    @Test
+    void cleanupExpiredSessions_releasesTheDfcSessionWithTheSessionLoader() {
+        String sessionId = connect();
+        sessionService.getSessionInfo(sessionId).setLastActivity(Instant.now().minus(Duration.ofHours(1)));
+        AtomicReference<ClassLoader> loaderAtRelease = recordLoaderAtRelease();
+        ClassLoader previous = Thread.currentThread().getContextClassLoader();
+
+        sessionService.cleanupExpiredSessions();
+
+        assertSame(dfcLoader, loaderAtRelease.get());
+        assertSame(previous, Thread.currentThread().getContextClassLoader());
     }
 
     @Test
@@ -244,6 +389,24 @@ class DfcSessionServiceImplTest {
                 .username("dmadmin")
                 .password("password")
                 .build()).getSessionId();
+    }
+
+    private AtomicReference<ClassLoader> recordLoaderAtIsConnected() {
+        AtomicReference<ClassLoader> loader = new AtomicReference<>();
+        when(dfSession.isConnected()).thenAnswer(invocation -> {
+            loader.set(Thread.currentThread().getContextClassLoader());
+            return true;
+        });
+        return loader;
+    }
+
+    private AtomicReference<ClassLoader> recordLoaderAtRelease() {
+        AtomicReference<ClassLoader> loader = new AtomicReference<>();
+        doAnswer(invocation -> {
+            loader.set(Thread.currentThread().getContextClassLoader());
+            return null;
+        }).when(sessionManager).release(dfSession);
+        return loader;
     }
 
     private static void await(CountDownLatch latch) {

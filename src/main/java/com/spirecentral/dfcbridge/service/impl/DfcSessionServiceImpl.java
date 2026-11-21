@@ -7,6 +7,7 @@ import com.spirecentral.dfcbridge.exception.SessionNotFoundException;
 import com.spirecentral.dfcbridge.model.RepositoryInfo;
 import com.spirecentral.dfcbridge.model.SessionInfo;
 import com.spirecentral.dfcbridge.service.DfcAvailabilityService;
+import com.spirecentral.dfcbridge.service.DfcInstanceRegistry;
 import com.spirecentral.dfcbridge.service.DfcSessionService;
 import com.spirecentral.dfcbridge.util.DfcExceptionUtils;
 import com.spirecentral.dfcbridge.util.DfcReflection;
@@ -28,7 +29,7 @@ import java.util.function.Function;
 
 /**
  * Implementation of DfcSessionService using reflection to call DFC APIs.
- * DFC classes must be available on the classpath at runtime.
+ * Each session runs in the DFC instance of the docbroker it connected through, from DfcInstanceRegistry.
  */
 @Service
 public class DfcSessionServiceImpl implements DfcSessionService {
@@ -47,12 +48,14 @@ public class DfcSessionServiceImpl implements DfcSessionService {
 
     private final Map<String, SessionHolder> sessions = new ConcurrentHashMap<>();
     private final DfcAvailabilityService dfcAvailability;
+    private final DfcInstanceRegistry dfcInstances;
 
     @Value("${dfc.session.timeout-minutes:30}")
     private int sessionTimeoutMinutes;
 
-    public DfcSessionServiceImpl(DfcAvailabilityService dfcAvailability) {
+    public DfcSessionServiceImpl(DfcAvailabilityService dfcAvailability, DfcInstanceRegistry dfcInstances) {
         this.dfcAvailability = dfcAvailability;
+        this.dfcInstances = dfcInstances;
     }
 
     @Override
@@ -70,59 +73,64 @@ public class DfcSessionServiceImpl implements DfcSessionService {
                 request.getRepository(), request.getDocbroker(), request.getPort());
 
         try {
-            Object dfClient = DfcReflection.invoke(DFC_CLIENT_CLASS, null, "getLocalClient", NO_PARAMS);
-
-            Object loginInfo = DfcReflection.newInstance(DFC_LOGIN_INFO_CLASS);
-            DfcReflection.invoke(loginInfo, "setUser", STRING_PARAM, request.getUsername());
-            DfcReflection.invoke(loginInfo, "setPassword", STRING_PARAM, request.getPassword());
-            if (request.getDomain() != null) {
-                DfcReflection.invoke(loginInfo, "setDomain", STRING_PARAM, request.getDomain());
-            }
-
-            Object sessionManager = DfcReflection.invoke(dfClient, "newSessionManager");
-            DfcReflection.invoke(DFC_SESSION_MANAGER_IFACE, sessionManager, "setIdentity",
-                    new Class<?>[]{String.class, Class.forName(DFC_LOGIN_INFO_IFACE)},
-                    request.getRepository(), loginInfo);
-            Object dfSession = DfcReflection.invoke(DFC_SESSION_MANAGER_IFACE, sessionManager, "getSession",
-                    STRING_PARAM, request.getRepository());
-
-            // Generate session ID
-            String sessionId = UUID.randomUUID().toString();
-
-            // Get repository info
-            RepositoryInfo repoInfo = extractRepositoryInfo(dfSession, request);
-
-            // Store session
-            SessionHolder holder = new SessionHolder();
-            holder.sessionManager = sessionManager;
-            holder.dfSession = dfSession;
-            holder.sessionInfo = SessionInfo.builder()
-                    .sessionId(sessionId)
-                    .connected(true)
-                    .repository(request.getRepository())
-                    .user(request.getUsername())
-                    .docbroker(request.getDocbroker())
-                    .port(request.getPort())
-                    .sessionStart(Instant.now())
-                    .lastActivity(Instant.now())
-                    .serverVersion(repoInfo.getServerVersion())
-                    .build();
-            sessions.put(sessionId, holder);
-
-            log.info("Session {} established for user {} on repository {}",
-                    sessionId, request.getUsername(), request.getRepository());
-
-            return ConnectResponse.builder()
-                    .sessionId(sessionId)
-                    .repositoryInfo(repoInfo)
-                    .build();
-
+            ClassLoader dfcLoader = dfcInstances.loaderFor(request.getDocbroker(), request.getPort());
+            return withDfcLoader(dfcLoader, () -> openSession(request, dfcLoader));
         } catch (ClassNotFoundException e) {
-            throw new ConnectionException("DFC libraries not found on classpath. " +
+            throw new ConnectionException("DFC classes not found in dfc.home. " +
                     "Ensure DFC is properly installed and configured.", HttpStatus.SERVICE_UNAVAILABLE);
         } catch (Exception e) {
             throw new ConnectionException("Failed to connect: " + DfcExceptionUtils.unwrap(e).getMessage(), e);
         }
+    }
+
+    private ConnectResponse openSession(ConnectRequest request, ClassLoader dfcLoader) throws Exception {
+        Object dfClient = DfcReflection.invoke(DFC_CLIENT_CLASS, null, "getLocalClient", NO_PARAMS);
+
+        Object loginInfo = DfcReflection.newInstance(DFC_LOGIN_INFO_CLASS);
+        DfcReflection.invoke(loginInfo, "setUser", STRING_PARAM, request.getUsername());
+        DfcReflection.invoke(loginInfo, "setPassword", STRING_PARAM, request.getPassword());
+        if (request.getDomain() != null) {
+            DfcReflection.invoke(loginInfo, "setDomain", STRING_PARAM, request.getDomain());
+        }
+
+        Object sessionManager = DfcReflection.invoke(dfClient, "newSessionManager");
+        DfcReflection.invoke(DFC_SESSION_MANAGER_IFACE, sessionManager, "setIdentity",
+                new Class<?>[]{String.class, DfcReflection.dfcClass(DFC_LOGIN_INFO_IFACE)},
+                request.getRepository(), loginInfo);
+        Object dfSession = DfcReflection.invoke(DFC_SESSION_MANAGER_IFACE, sessionManager, "getSession",
+                STRING_PARAM, request.getRepository());
+
+        // Generate session ID
+        String sessionId = UUID.randomUUID().toString();
+
+        // Get repository info
+        RepositoryInfo repoInfo = extractRepositoryInfo(dfSession, request);
+
+        // Store session
+        SessionHolder holder = new SessionHolder();
+        holder.dfcLoader = dfcLoader;
+        holder.sessionManager = sessionManager;
+        holder.dfSession = dfSession;
+        holder.sessionInfo = SessionInfo.builder()
+                .sessionId(sessionId)
+                .connected(true)
+                .repository(request.getRepository())
+                .user(request.getUsername())
+                .docbroker(request.getDocbroker())
+                .port(request.getPort())
+                .sessionStart(Instant.now())
+                .lastActivity(Instant.now())
+                .serverVersion(repoInfo.getServerVersion())
+                .build();
+        sessions.put(sessionId, holder);
+
+        log.info("Session {} established for user {} on repository {}",
+                sessionId, request.getUsername(), request.getRepository());
+
+        return ConnectResponse.builder()
+                .sessionId(sessionId)
+                .repositoryInfo(repoInfo)
+                .build();
     }
 
     @Override
@@ -132,7 +140,10 @@ public class DfcSessionServiceImpl implements DfcSessionService {
             holder.lock.lock();
             try {
                 holder.released = true;
-                releaseDfcSession(holder);
+                withDfcLoader(holder.dfcLoader, () -> {
+                    releaseDfcSession(holder);
+                    return null;
+                });
             } finally {
                 holder.lock.unlock();
             }
@@ -157,7 +168,7 @@ public class DfcSessionServiceImpl implements DfcSessionService {
         }
         holder.lock.lock();
         try {
-            return !holder.released && isDfcSessionConnected(holder);
+            return !holder.released && withDfcLoader(holder.dfcLoader, () -> isDfcSessionConnected(holder));
         } finally {
             holder.lock.unlock();
         }
@@ -179,20 +190,22 @@ public class DfcSessionServiceImpl implements DfcSessionService {
         }
         holder.lock.lock();
         try {
-            // disconnect or cleanup may have released the session while this request waited for the lock
-            if (holder.released) {
-                throw new SessionNotFoundException(sessionId);
-            }
-            // a released DFC session handle fails every call, for example after an /api disconnect
-            if (!isDfcSessionConnected(holder)) {
-                sessions.remove(sessionId, holder);
-                holder.released = true;
-                releaseDfcSession(holder);
-                log.info("Session {} removed: DFC session is no longer connected", sessionId);
-                throw new SessionNotFoundException(sessionId);
-            }
-            holder.sessionInfo.setLastActivity(Instant.now());
-            return work.apply(holder.dfSession);
+            return withDfcLoader(holder.dfcLoader, () -> {
+                // disconnect or cleanup may have released the session while this request waited for the lock
+                if (holder.released) {
+                    throw new SessionNotFoundException(sessionId);
+                }
+                // a released DFC session handle fails every call, for example after an /api disconnect
+                if (!isDfcSessionConnected(holder)) {
+                    sessions.remove(sessionId, holder);
+                    holder.released = true;
+                    releaseDfcSession(holder);
+                    log.info("Session {} removed: DFC session is no longer connected", sessionId);
+                    throw new SessionNotFoundException(sessionId);
+                }
+                holder.sessionInfo.setLastActivity(Instant.now());
+                return work.apply(holder.dfSession);
+            });
         } finally {
             holder.lock.unlock();
         }
@@ -218,7 +231,10 @@ public class DfcSessionServiceImpl implements DfcSessionService {
                 // Release the DFC session directly instead of calling disconnect()
                 // since removeIf will handle removing the entry from the map
                 holder.released = true;
-                releaseDfcSession(holder);
+                withDfcLoader(holder.dfcLoader, () -> {
+                    releaseDfcSession(holder);
+                    return null;
+                });
                 return true;
             } finally {
                 holder.lock.unlock();
@@ -241,10 +257,28 @@ public class DfcSessionServiceImpl implements DfcSessionService {
     private void releaseDfcSession(SessionHolder holder) {
         try {
             DfcReflection.invoke(holder.sessionManager, "release",
-                    new Class<?>[]{Class.forName(DFC_SESSION_IFACE)}, holder.dfSession);
+                    new Class<?>[]{DfcReflection.dfcClass(DFC_SESSION_IFACE)}, holder.dfSession);
         } catch (Exception e) {
             log.warn("Error releasing DFC session: {}", e.getMessage());
         }
+    }
+
+    // Tomcat reuses request threads, so a loader left on a thread would route its next request
+    // to this docbroker.
+    private static <T, E extends Exception> T withDfcLoader(ClassLoader dfcLoader, DfcWork<T, E> work) throws E {
+        Thread thread = Thread.currentThread();
+        ClassLoader previous = thread.getContextClassLoader();
+        thread.setContextClassLoader(dfcLoader);
+        try {
+            return work.run();
+        } finally {
+            thread.setContextClassLoader(previous);
+        }
+    }
+
+    @FunctionalInterface
+    private interface DfcWork<T, E extends Exception> {
+        T run() throws E;
     }
 
     @PreDestroy
@@ -266,18 +300,24 @@ public class DfcSessionServiceImpl implements DfcSessionService {
                 docbaseId = (String) DfcReflection.invoke(docbaseConfig, "getString", STRING_PARAM, "r_docbase_id");
             }
 
+            Object serverConfig = DfcReflection.invoke(dfSession, "getServerConfig");
+            String contentServerHost = null;
+            if (serverConfig != null) {
+                contentServerHost = (String) DfcReflection.invoke(serverConfig, "getString", STRING_PARAM,
+                        "r_host_name");
+            }
+
             return RepositoryInfo.builder()
                     .name(request.getRepository())
                     .id(docbaseId)
                     .serverVersion(serverVersion)
-                    .contentServerHost(request.getDocbroker())
+                    .contentServerHost(contentServerHost)
                     .build();
 
         } catch (Exception e) {
             log.warn("Could not extract full repository info: {}", e.getMessage());
             return RepositoryInfo.builder()
                     .name(request.getRepository())
-                    .contentServerHost(request.getDocbroker())
                     .build();
         }
     }
@@ -288,6 +328,7 @@ public class DfcSessionServiceImpl implements DfcSessionService {
     private static class SessionHolder {
         final ReentrantLock lock = new ReentrantLock();
         boolean released;
+        ClassLoader dfcLoader;
         Object sessionManager;
         Object dfSession;
         SessionInfo sessionInfo;

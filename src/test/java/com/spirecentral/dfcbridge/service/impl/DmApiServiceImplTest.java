@@ -689,5 +689,20 @@ class DmApiServiceImplTest {
         public boolean isConnected() {
             return true;
         }
+
+        @Override
+        public String getServerVersion() {
+            return null;
+        }
+
+        @Override
+        public com.documentum.fc.client.IDfTypedObject getDocbaseConfig() {
+            return null;
+        }
+
+        @Override
+        public com.documentum.fc.client.IDfTypedObject getServerConfig() {
+            return null;
+        }
     }
 }

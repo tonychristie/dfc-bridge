@@ -141,17 +141,9 @@ function Test-DfcSetup {
         $errors++
     } elseif (-not (Test-Path -LiteralPath $dfcProperties -PathType Leaf)) {
         Write-Output "[WARNING] dfc.properties not found in $DfcConfig"
-        Write-Output '  You may need to create this file with docbroker settings.'
+        Write-Output '  You may need to create this file with your DFC settings.'
     } else {
         Write-Output '[OK] dfc.properties found'
-        # Extract docbroker info
-        $line = Get-Content -LiteralPath $dfcProperties | Where-Object { $_ -match '^dfc\.docbroker\.host\[0\]' } | Select-Object -First 1
-        if ($line) {
-            $docbroker = ($line -split '=')[1]
-            if ($docbroker) {
-                Write-Output "     Docbroker: $docbroker"
-            }
-        }
     }
 
     Write-Output ''
@@ -255,38 +247,19 @@ if ($currentStamp -cne $JarStamp) {
     [System.IO.File]::WriteAllText($ExtractMarker, $JarStamp + "`n")
 }
 
-# Build Spring Boot lib classpath (exclude log4j-to-slf4j bridge to avoid conflict with DFC)
+# Build Spring Boot lib classpath
 function Get-BootClasspath {
     $entries = @()
     foreach ($jar in (Get-Jars (Join-Path $ExtractedDir 'BOOT-INF\lib') '*.jar')) {
-        # Skip this conflicting bridge when in DFC mode
-        if ($jar.Name -like '*log4j-to-slf4j*' -and $Mode -eq 'dfc') {
-            continue
-        }
         $entries += $jar.FullName
     }
     $entries -join ';'
 }
 
-# Build DFC classpath (DFC log4j jars MUST come first to avoid conflicts)
-function Get-DfcClasspath {
-    $entries = @()
-
-    # Add log4j jars first
-    foreach ($jar in (Get-Jars $DfcHome 'log4j*.jar')) {
-        $entries += $jar.FullName
-    }
-
-    # Add remaining DFC jars (skip log4j, already added, and the Documentum
-    # servlet-api.jar, an older Servlet API than the embedded Tomcat's)
-    foreach ($jar in (Get-Jars $DfcHome '*.jar')) {
-        if ($jar.Name -like '*log4j*' -or $jar.Name -like 'servlet-api*.jar') {
-            continue
-        }
-        $entries += $jar.FullName
-    }
-
-    $entries -join ';'
+# Java starts in run\, so a relative path would resolve there. A trailing \ would
+# escape the closing quote on the command line.
+function Get-FullPathArg([string]$Path) {
+    [System.IO.Path]::GetFullPath($Path).TrimEnd('\')
 }
 
 # JVM options for DFC compatibility (required for Java 17+)
@@ -301,29 +274,24 @@ $JvmOpts = @(
     '--add-opens java.base/java.security=ALL-UNNAMED'
 )
 
-# Build classpath based on mode
-$BootCp = Get-BootClasspath
+# DFC is not on the classpath: the bridge loads it per docbroker from --dfc.home
 $BootClasses = Join-Path $ExtractedDir 'BOOT-INF\classes'
+$Cp = "$BootClasses;$(Get-BootClasspath)"
+$DfcArgs = ''
 
 if ($Mode -eq 'dfc') {
-    # DFC mode: DFC jars first, then config, then app classes, then boot libs
     if (-not (Test-Path -LiteralPath $DfcHome -PathType Container)) {
         Write-Output "Error: DFC_HOME directory not found at $DfcHome"
         Write-Output 'Either set DFC_HOME environment variable or use --mode=nodfc'
         exit 1
     }
 
-    $DfcCp = Get-DfcClasspath
-    $DfcConfigPath = [System.IO.Path]::GetFullPath($DfcConfig)
-    $Cp = "$DfcCp;$DfcConfigPath;$BootClasses;$BootCp"
+    $DfcArgs = " --dfc.home=`"$(Get-FullPathArg $DfcHome)`" --dfc.config=`"$(Get-FullPathArg $DfcConfig)`""
 
     Write-Output 'Starting DFC Bridge in DFC mode...'
     Write-Output "  DFC_HOME: $DfcHome"
     Write-Output "  Port: $ServerPort"
 } else {
-    # No-DFC mode: just app classes and boot libs
-    $Cp = "$BootClasses;$BootCp"
-
     Write-Output 'Starting DFC Bridge in NO-DFC mode (development/testing)...'
     Write-Output "  Port: $ServerPort"
     Write-Output '  Note: DFC operations will return 503 Service Unavailable'
@@ -332,8 +300,8 @@ if ($Mode -eq 'dfc') {
 Write-Output ''
 
 # Windows PowerShell 5.1 joins -ArgumentList with spaces and does not quote,
-# so the classpath is quoted here to survive a path that contains a space.
-$JavaArgs = ($JvmOpts -join ' ') + " -Dserver.port=$ServerPort -cp `"$Cp`" com.spirecentral.dfcbridge.DfcBridgeApplication"
+# so the classpath and the DFC paths are quoted here to survive a path that contains a space.
+$JavaArgs = ($JvmOpts -join ' ') + " -Dserver.port=$ServerPort -cp `"$Cp`" com.spirecentral.dfcbridge.DfcBridgeApplication$DfcArgs"
 
 # Run the application
 $Bridge = Start-Process -FilePath 'java' -ArgumentList $JavaArgs -WorkingDirectory $RunDir -NoNewWindow -PassThru

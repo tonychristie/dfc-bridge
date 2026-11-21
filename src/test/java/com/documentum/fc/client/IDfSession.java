@@ -45,6 +45,12 @@ public interface IDfSession {
      */
     boolean isConnected();
 
+    String getServerVersion() throws DfException;
+
+    IDfTypedObject getDocbaseConfig() throws DfException;
+
+    IDfTypedObject getServerConfig() throws DfException;
+
     /**
      * Execute a dmAPI get command.
      *

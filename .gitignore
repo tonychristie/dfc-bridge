@@ -51,3 +51,6 @@ out/
 
 # Start script run directory
 run/
+
+# DFC instance folders, written in the working directory (the repository root under mvn spring-boot:run)
+dfc-instances/
