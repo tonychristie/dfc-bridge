@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter
+        xmlns="https://github.com/spotbugs/filter/3.0.0"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="https://github.com/spotbugs/filter/3.0.0 https://raw.githubusercontent.com/spotbugs/spotbugs/3.1.0/spotbugs/etc/findbugsfilter.xsd">
+
+    <!-- Spring injects the beans -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+        <Or>
+            <Class name="com.spirecentral.dfcbridge.controller.ObjectController"/>
+            <Class name="com.spirecentral.dfcbridge.service.impl.DfcSessionServiceImpl"/>
+        </Or>
+        <Method name="&lt;init&gt;"/>
+    </Match>
+
+    <!-- The names are part of the JSON contract -->
+    <Match>
+        <Bug pattern="NM_CONFUSING"/>
+        <Class name="com.spirecentral.dfcbridge.dto.ConnectRequest"/>
+        <Or>
+            <Method name="getUsername"/>
+            <Method name="setUsername"/>
+        </Or>
+    </Match>
+
+    <!-- getFileName() is never null for an entry from Files.list; two of the items are on lambdas -->
+    <Match>
+        <Bug pattern="NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE"/>
+        <Class name="com.spirecentral.dfcbridge.service.DfcInstanceRegistry"/>
+    </Match>
+
+    <!-- lock and unlock are paired in try and finally -->
+    <Match>
+        <Bug pattern="CWO_CLOSED_WITHOUT_OPENED"/>
+        <Class name="com.spirecentral.dfcbridge.service.impl.DfcSessionServiceImpl"/>
+        <Method name="disconnect"/>
+    </Match>
+
+    <!-- The reflection helpers pass on whatever DFC throws -->
+    <Match>
+        <Bug pattern="THROWS_METHOD_THROWS_CLAUSE_BASIC_EXCEPTION"/>
+        <Class name="com.spirecentral.dfcbridge.util.DfcReflection"/>
+        <Or>
+            <Method name="invoke"/>
+            <Method name="newInstance"/>
+        </Or>
+    </Match>
+    <Match>
+        <Bug pattern="THROWS_METHOD_THROWS_CLAUSE_BASIC_EXCEPTION"/>
+        <Or>
+            <And>
+                <Class name="com.spirecentral.dfcbridge.util.DfcQuery$RowMapper"/>
+                <Method name="map"/>
+            </And>
+            <And>
+                <Class name="com.spirecentral.dfcbridge.util.DfcQuery$RowReader"/>
+                <Method name="read"/>
+            </And>
+        </Or>
+    </Match>
+
+    <!-- A Java 11 detector on setAccessible; reported in dfc-bridge-java11 only -->
+    <Match>
+        <Bug pattern="DP_DO_INSIDE_DO_PRIVILEGED"/>
+        <Class name="com.spirecentral.dfcbridge.util.DfcReflection"/>
+        <Method name="findMethod"/>
+    </Match>
+</FindBugsFilter>

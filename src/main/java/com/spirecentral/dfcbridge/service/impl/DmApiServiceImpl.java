@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -66,7 +67,7 @@ public class DmApiServiceImpl implements DmApiService {
                 Object result;
                 String resultType;
 
-                String apiType = request.getApiType().toLowerCase();
+                String apiType = request.getApiType().toLowerCase(Locale.ROOT);
                 String command = request.getCommand();
 
                 switch (apiType) {
@@ -268,7 +269,7 @@ public class DmApiServiceImpl implements DmApiService {
             return false;
         }
 
-        String lowerValue = value.toLowerCase();
+        String lowerValue = value.toLowerCase(Locale.ROOT);
 
         // Check for known placeholders (session, c)
         if (SESSION_PLACEHOLDERS.contains(lowerValue)) {

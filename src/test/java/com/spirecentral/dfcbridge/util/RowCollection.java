@@ -1,6 +1,8 @@
 package com.spirecentral.dfcbridge.util;
 
 import com.documentum.fc.client.IDfCollection;
+import com.documentum.fc.common.DfTime;
+import com.documentum.fc.common.IDfTime;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -68,6 +70,10 @@ public class RowCollection implements IDfCollection {
 
     public String getRepeatingString(String attrName, int valueIndex) {
         return (String) ((List<?>) rows.get(index).get(attrName)).get(valueIndex);
+    }
+
+    public IDfTime getRepeatingTime(String attrName, int valueIndex) {
+        return new DfTime(getRepeatingString(attrName, valueIndex));
     }
 
     public static class Column {

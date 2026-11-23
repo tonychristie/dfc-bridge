@@ -1,6 +1,9 @@
 package com.spirecentral.dfcbridge.controller;
 
+import com.spirecentral.dfcbridge.config.ErrorResponses;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,6 +24,7 @@ public class RedirectController {
         summary = "Health check",
         description = "Returns a simple 200 OK response to indicate the service is running"
     )
+    @ErrorResponses
     public ResponseEntity<Map<String, String>> health() {
         return ResponseEntity.ok(Map.of("status", "ok"));
     }
@@ -30,6 +34,9 @@ public class RedirectController {
         summary = "Status redirect",
         description = "Redirects to /api/v1/status for bridge status information"
     )
+    @ApiResponses({
+        @ApiResponse(responseCode = "302", description = "Redirect to /api/v1/status")
+    })
     public RedirectView status() {
         return new RedirectView("/api/v1/status");
     }

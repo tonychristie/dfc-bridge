@@ -80,6 +80,38 @@ class DqlServiceImplTest {
         assertFalse(result.isHasMore());
     }
 
+    @Test
+    void executeQuery_repeatingStringColumn_returnsListOfValues() {
+        QueryResult result = executeOver(new RowCollection(
+                Map.of("keywords", List.of("alpha", "beta")))
+                .column("keywords", 2, true));
+
+        assertEquals(List.of(Map.of("keywords", List.of("alpha", "beta"))), result.getRows());
+    }
+
+    @Test
+    void executeQuery_repeatingTimeColumn_returnsListOfTimeTexts() {
+        QueryResult result = executeOver(new RowCollection(
+                Map.of("r_modify_dates", List.of("04/11/2026 18:30:00", "05/11/2026 09:00:00")))
+                .column("r_modify_dates", 4, true));
+
+        assertEquals(List.of(Map.of("r_modify_dates", List.of("04/11/2026 18:30:00", "05/11/2026 09:00:00"))),
+                result.getRows());
+    }
+
+    private QueryResult executeOver(RowCollection collection) {
+        DfQuery.reset(dql -> collection);
+        when(sessionService.withSession(eq("test-session"), any())).thenAnswer(
+                invocation -> invocation.<Function<Object, Object>>getArgument(1).apply(null));
+        DqlRequest request = DqlRequest.builder()
+                .sessionId("test-session")
+                .query("SELECT keywords FROM dm_document")
+                .maxRows(10)
+                .build();
+
+        return new DqlServiceImpl(sessionService).executeQuery(request);
+    }
+
     private QueryResult executeOverThreeRows(int startRow, int maxRows) {
         RowCollection collection = new RowCollection(
                 Map.of("object_name", "a"),

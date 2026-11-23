@@ -5,6 +5,7 @@ import com.documentum.fc.client.DfIdNotFoundException;
 import com.documentum.fc.client.DfNoServersException;
 import com.documentum.fc.common.DfException;
 import com.documentum.fc.common.DfRuntimeException;
+import com.spirecentral.dfcbridge.exception.InvalidInputException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
@@ -86,6 +87,18 @@ class DfcExceptionUtilsTest {
     void statusOf_nonDfcException_is500() {
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR,
                 DfcExceptionUtils.statusOf(new NoSuchMethodException("apiGet")));
+    }
+
+    @Test
+    void statusOf_invalidInput_is400() {
+        assertEquals(HttpStatus.BAD_REQUEST,
+                DfcExceptionUtils.statusOf(new InvalidInputException("Invalid time value: x")));
+    }
+
+    @Test
+    void statusOf_invalidInputInsideInvocationTargetException_is400() {
+        assertEquals(HttpStatus.BAD_REQUEST, DfcExceptionUtils.statusOf(
+                new InvocationTargetException(new InvalidInputException("Invalid time value: x"))));
     }
 
     @Test

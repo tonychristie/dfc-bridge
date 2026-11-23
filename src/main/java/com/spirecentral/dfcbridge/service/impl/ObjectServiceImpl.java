@@ -5,6 +5,7 @@ import com.spirecentral.dfcbridge.dto.ApiResponse;
 import com.spirecentral.dfcbridge.dto.CreateObjectRequest;
 import com.spirecentral.dfcbridge.dto.UpdateObjectRequest;
 import com.spirecentral.dfcbridge.exception.DfcBridgeException;
+import com.spirecentral.dfcbridge.exception.InvalidInputException;
 import com.spirecentral.dfcbridge.exception.ObjectNotFoundException;
 import com.spirecentral.dfcbridge.model.AttributeValue;
 import com.spirecentral.dfcbridge.model.ObjectInfo;
@@ -155,7 +156,7 @@ public class ObjectServiceImpl implements ObjectService {
                 Object folder = DfcReflection.invoke(DFC_SESSION_IFACE, dfSession, "getFolderByPath",
                         STRING_PARAM, folderPath);
                 if (folder == null) {
-                    throw new ObjectNotFoundException("Folder not found: " + folderPath);
+                    throw ObjectNotFoundException.withMessage("Folder not found: " + folderPath);
                 }
 
                 return listFolder(dfSession, folder);
@@ -178,7 +179,7 @@ public class ObjectServiceImpl implements ObjectService {
                 Object type = DfcReflection.invoke(DFC_SESSION_IFACE, dfSession, "getType", STRING_PARAM, typeName);
 
                 if (type == null) {
-                    throw new ObjectNotFoundException("Type not found: " + typeName);
+                    throw ObjectNotFoundException.withMessage("Type not found: " + typeName);
                 }
 
                 return extractTypeInfo(type);
@@ -235,7 +236,7 @@ public class ObjectServiceImpl implements ObjectService {
                     target = DfcReflection.invoke(DFC_SESSION_IFACE, dfSession, "getType", STRING_PARAM,
                             request.getTypeName());
                     if (target == null) {
-                        throw new ObjectNotFoundException("Type not found: " + request.getTypeName());
+                        throw ObjectNotFoundException.withMessage("Type not found: " + request.getTypeName());
                     }
                 } else {
                     target = dfSession;
@@ -269,7 +270,7 @@ public class ObjectServiceImpl implements ObjectService {
             try {
                 Object folder = getObjectById(dfSession, folderId);
                 if (!DfcReflection.dfcClass(DFC_FOLDER_IFACE).isInstance(folder)) {
-                    throw new ObjectNotFoundException("Folder not found: " + folderId);
+                    throw ObjectNotFoundException.withMessage("Folder not found: " + folderId);
                 }
 
                 return listFolder(dfSession, folder);
@@ -666,7 +667,7 @@ public class ObjectServiceImpl implements ObjectService {
             return new BigDecimal(value.toString()).toPlainString();
         }
         String kind = value instanceof List ? "a list" : "an object";
-        throw new IllegalArgumentException("Attribute " + attrName + " does not accept " + kind + " as a value");
+        throw new InvalidInputException("Attribute " + attrName + " does not accept " + kind + " as a value");
     }
 
     private void revertAfterFailure(Object sysObject, String objectId) {
@@ -745,7 +746,7 @@ public class ObjectServiceImpl implements ObjectService {
             }
         }
         if (chosen == null) {
-            throw new NoSuchMethodException("No method " + methodName + " accepts the arguments ("
+            throw new InvalidInputException("No method " + methodName + " accepts the arguments ("
                     + argTypeNames(argList) + ")");
         }
         chosen.setAccessible(true);
@@ -851,7 +852,7 @@ public class ObjectServiceImpl implements ObjectService {
     private Object toDfTime(String value) throws Exception {
         Object time = DfcReflection.newInstance(DFC_TIME_CLASS, STRING_PARAM, value);
         if (!(Boolean) DfcReflection.invoke(time, "isValid")) {
-            throw new IllegalArgumentException("Invalid time value: " + value);
+            throw new InvalidInputException("Invalid time value: " + value);
         }
         return time;
     }

@@ -1,5 +1,6 @@
 package com.spirecentral.dfcbridge.util;
 
+import com.spirecentral.dfcbridge.exception.InvalidInputException;
 import org.springframework.http.HttpStatus;
 
 import java.lang.reflect.InvocationTargetException;
@@ -42,6 +43,9 @@ public final class DfcExceptionUtils {
      */
     public static HttpStatus statusOf(Throwable cause) {
         Throwable e = cause instanceof Exception ? unwrap((Exception) cause) : cause;
+        if (e instanceof InvalidInputException) {
+            return HttpStatus.BAD_REQUEST;
+        }
         if (e == null || !e.getClass().getName().startsWith(DFC_PACKAGE_PREFIX)) {
             return HttpStatus.INTERNAL_SERVER_ERROR;
         }

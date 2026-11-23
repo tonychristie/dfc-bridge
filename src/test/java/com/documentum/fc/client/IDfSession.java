@@ -39,6 +39,15 @@ public interface IDfSession {
     Object getFolderByPath(String folderPath);
 
     /**
+     * Create a new object of a type.
+     *
+     * @param typeName the type name
+     * @return the new, unsaved object
+     * @throws DfException when DFC cannot create the object, for example for an unknown type
+     */
+    Object newObject(String typeName) throws DfException;
+
+    /**
      * Check whether the session is connected.
      *
      * @return false once the session has been released

@@ -1,5 +1,6 @@
 package com.spirecentral.dfcbridge.controller;
 
+import com.spirecentral.dfcbridge.config.ErrorResponses;
 import com.spirecentral.dfcbridge.dto.ErrorResponse;
 import com.spirecentral.dfcbridge.model.GroupInfo;
 import com.spirecentral.dfcbridge.model.UserInfo;
@@ -27,6 +28,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1")
 @Tag(name = "Users and Groups", description = "User and group operations")
+@ErrorResponses(session = true)
 public class UserGroupController {
 
     private final UserGroupService userGroupService;
@@ -67,7 +69,7 @@ public class UserGroupController {
         ),
         @ApiResponse(
             responseCode = "404",
-            description = "User not found",
+            description = "User or session not found",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         )
     })
@@ -110,7 +112,7 @@ public class UserGroupController {
         ),
         @ApiResponse(
             responseCode = "404",
-            description = "Group not found",
+            description = "Group or session not found",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         )
     })
