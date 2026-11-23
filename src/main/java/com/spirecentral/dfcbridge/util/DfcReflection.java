@@ -56,14 +56,22 @@ public final class DfcReflection {
      */
     public static Object invoke(String typeName, Object target, String methodName, Class<?>[] paramTypes,
                                 Object... args) throws Exception {
-        return invoke(Class.forName(typeName), target, methodName, paramTypes, args);
+        return invoke(dfcClass(typeName), target, methodName, paramTypes, args);
     }
 
     /**
      * Creates an instance of the DFC class with the given name.
      */
     public static Object newInstance(String className, Class<?>[] paramTypes, Object... args) throws Exception {
-        return Class.forName(className).getConstructor(paramTypes).newInstance(args);
+        return dfcClass(className).getConstructor(paramTypes).newInstance(args);
+    }
+
+    /**
+     * Loads the DFC class with the given name through the thread context classloader,
+     * which holds the DFC instance of the current session's docbroker.
+     */
+    public static Class<?> dfcClass(String className) throws ClassNotFoundException {
+        return Class.forName(className, true, Thread.currentThread().getContextClassLoader());
     }
 
     /**

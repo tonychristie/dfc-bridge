@@ -38,7 +38,7 @@ Client Application (e.g., VS Code Extension)
   - `dfc.jar` - Core DFC library
   - `aspectjrt.jar` - AspectJ runtime
   - `log4j-api-*.jar`, `log4j-core-*.jar`, `log4j-1.2-api-*.jar` - Logging
-- **dfc.properties** file configured with your docbroker settings
+- **dfc.properties** file with your DFC settings. It does not choose the docbroker: each connect request names the docbroker and port to connect through
 
 > **Note:** DFC libraries cannot be embedded due to licensing restrictions. Copy only the required JARs from an existing Documentum installation. See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed setup instructions.
 
@@ -102,8 +102,8 @@ The script also runs from the unzipped release bundle, where it uses the JAR bes
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `DFC_HOME` | Path to DFC shared libraries | `$HOME/documentum/shared` |
-| `DFC_CONFIG` | Path to DFC config directory | `$HOME/documentum/config` |
+| `DFC_HOME` | Path to DFC shared libraries, passed to the bridge as `--dfc.home` | `$HOME/documentum/shared` |
+| `DFC_CONFIG` | Path to DFC config directory, passed to the bridge as `--dfc.config` | `$HOME/documentum/config` |
 | `SERVER_PORT` | Server port | 9876 |
 | `SERVER_ADDRESS` | Address the server listens on | 127.0.0.1 |
 
@@ -184,8 +184,8 @@ Create `application.yml` in the same directory as the JAR.
 | `SERVER_PORT` | HTTP port | 9876 |
 | `SERVER_ADDRESS` | Address the server listens on | 127.0.0.1 |
 | `DFC_SESSION_TIMEOUT_MINUTES` | Session timeout | 30 |
-| `DFC_HOME` | Path to DFC shared libraries (used by startup script) | - |
-| `DFC_CONFIG` | Path to DFC config directory (used by startup script) | - |
+| `DFC_HOME` | Path to DFC shared libraries (used by startup script, which passes it as `--dfc.home`) | - |
+| `DFC_CONFIG` | Path to DFC config directory (used by startup script, which passes it as `--dfc.config`) | - |
 
 ## API Documentation
 
@@ -332,24 +332,23 @@ Response when DFC unavailable:
   "service": "dfc-bridge",
   "dfcAvailable": false,
   "mode": "degraded",
-  "dfcUnavailableReason": "DFC client class not found on classpath"
+  "dfcUnavailableReason": "dfc.home is not set"
 }
 ```
 
 ## Troubleshooting
 
-### DFC not found on classpath
+### DFC not found
 
-Error: `DFC_UNAVAILABLE - DFC libraries are not available`
+Error: `DFC_UNAVAILABLE - DFC libraries are not available`. `/api/v1/status` gives the reason: `dfc.home is not set`, or `dfc.jar not found in <path>`.
 
 Solution: Set `DFC_HOME` to the directory that holds the DFC JARs and start with `./start-dfc-bridge.sh`, or follow [Manual Invocation](DEPLOYMENT.md#manual-invocation) in `DEPLOYMENT.md`. Run `./start-dfc-bridge.sh --verify` to check the setup.
 
 ### Connection refused
 
 Check that:
-1. The docbroker host and port are correct
+1. The `docbroker` and `port` in the connect request are correct. They choose the docbroker; `dfc.properties` does not
 2. Network connectivity to the docbroker is available
-3. The `dfc.properties` file is properly configured
 
 ### Session timeout
 

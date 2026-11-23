@@ -108,14 +108,9 @@ verify_dfc_setup() {
         errors=$((errors + 1))
     elif [ ! -f "$DFC_CONFIG/dfc.properties" ]; then
         echo "[WARNING] dfc.properties not found in $DFC_CONFIG"
-        echo "  You may need to create this file with docbroker settings."
+        echo "  You may need to create this file with your DFC settings."
     else
         echo "[OK] dfc.properties found"
-        # Extract docbroker info
-        local docbroker=$(grep -E '^dfc.docbroker.host\[0\]' "$DFC_CONFIG/dfc.properties" 2>/dev/null | cut -d= -f2)
-        if [ -n "$docbroker" ]; then
-            echo "     Docbroker: $docbroker"
-        fi
     fi
 
     echo ""
@@ -216,18 +211,10 @@ fi
 
 cd "$RUN_DIR"
 
-# Build Spring Boot lib classpath (exclude log4j-to-slf4j bridge to avoid conflict with DFC)
+# Build Spring Boot lib classpath
 build_boot_classpath() {
     local BOOT_CP=""
     for jar in "$EXTRACTED_DIR"/BOOT-INF/lib/*.jar; do
-        case "$jar" in
-            *log4j-to-slf4j*)
-                # Skip this conflicting bridge when in DFC mode
-                if [[ "$MODE" == "dfc" ]]; then
-                    continue
-                fi
-                ;;
-        esac
         if [ -z "$BOOT_CP" ]; then
             BOOT_CP="$jar"
         else
@@ -235,38 +222,6 @@ build_boot_classpath() {
         fi
     done
     echo "$BOOT_CP"
-}
-
-# Build DFC classpath (DFC log4j jars MUST come first to avoid conflicts)
-build_dfc_classpath() {
-    local DFC_CP=""
-
-    # Add log4j jars first
-    for jar in "$DFC_HOME"/log4j*.jar; do
-        [ -e "$jar" ] || continue
-        if [ -z "$DFC_CP" ]; then
-            DFC_CP="$jar"
-        else
-            DFC_CP="$DFC_CP:$jar"
-        fi
-    done
-
-    # Add remaining DFC jars (skip log4j, already added, and the Documentum
-    # servlet-api.jar, an older Servlet API than the embedded Tomcat's)
-    for jar in "$DFC_HOME"/*.jar; do
-        [ -e "$jar" ] || continue
-        case "$jar" in
-            *log4j*) continue ;;
-            */servlet-api*.jar) continue ;;
-        esac
-        if [ -z "$DFC_CP" ]; then
-            DFC_CP="$jar"
-        else
-            DFC_CP="$DFC_CP:$jar"
-        fi
-    done
-
-    echo "$DFC_CP"
 }
 
 # JVM options for DFC compatibility (required for Java 17+)
@@ -279,27 +234,23 @@ JVM_OPTS="--add-opens java.base/sun.security.x509=ALL-UNNAMED \
   --add-opens java.base/java.io=ALL-UNNAMED \
   --add-opens java.base/java.security=ALL-UNNAMED"
 
-# Build classpath based on mode
-BOOT_CP=$(build_boot_classpath)
+# DFC is not on the classpath: the bridge loads it per docbroker from --dfc.home
+CP="$EXTRACTED_DIR/BOOT-INF/classes:$(build_boot_classpath)"
+DFC_ARGS=()
 
 if [[ "$MODE" == "dfc" ]]; then
-    # DFC mode: DFC jars first, then config, then app classes, then boot libs
     if [ ! -d "$DFC_HOME" ]; then
         echo "Error: DFC_HOME directory not found at $DFC_HOME"
         echo "Either set DFC_HOME environment variable or use --mode=nodfc"
         exit 1
     fi
 
-    DFC_CP=$(build_dfc_classpath)
-    CP="$DFC_CP:$DFC_CONFIG:$EXTRACTED_DIR/BOOT-INF/classes:$BOOT_CP"
+    DFC_ARGS=(--dfc.home="$DFC_HOME" --dfc.config="$DFC_CONFIG")
 
     echo "Starting DFC Bridge in DFC mode..."
     echo "  DFC_HOME: $DFC_HOME"
     echo "  Port: $SERVER_PORT"
 else
-    # No-DFC mode: just app classes and boot libs
-    CP="$EXTRACTED_DIR/BOOT-INF/classes:$BOOT_CP"
-
     echo "Starting DFC Bridge in NO-DFC mode (development/testing)..."
     echo "  Port: $SERVER_PORT"
     echo "  Note: DFC operations will return 503 Service Unavailable"
@@ -315,4 +266,5 @@ exec java \
   $JVM_OPTS \
   -Dserver.port="$SERVER_PORT" \
   -cp "$CP" \
-  com.spirecentral.dfcbridge.DfcBridgeApplication
+  com.spirecentral.dfcbridge.DfcBridgeApplication \
+  "${DFC_ARGS[@]}"

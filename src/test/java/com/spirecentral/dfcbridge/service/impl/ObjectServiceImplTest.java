@@ -960,6 +960,21 @@ class ObjectServiceImplTest {
         }
 
         @Override
+        public String getServerVersion() {
+            return null;
+        }
+
+        @Override
+        public com.documentum.fc.client.IDfTypedObject getDocbaseConfig() {
+            return null;
+        }
+
+        @Override
+        public com.documentum.fc.client.IDfTypedObject getServerConfig() {
+            return null;
+        }
+
+        @Override
         public String apiGet(String method, String args) {
             return null;
         }

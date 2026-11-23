@@ -103,10 +103,6 @@ These JARs are **not required** for dfc-bridge but may be needed for specific fe
 Create `dfc.properties` in your `$DFC_CONFIG` directory:
 
 ```properties
-# Docbroker configuration
-dfc.docbroker.host[0]=docbroker.example.com
-dfc.docbroker.port[0]=1489
-
 # Global registry (Content Server host)
 dfc.globalregistry.repository=MyRepo
 dfc.globalregistry.username=dm_bof_registry
@@ -126,20 +122,9 @@ dfc.tracing.timing.enabled=false
 
 ### Docbroker Configuration
 
-The docbroker is the entry point to Documentum. Get these values from your Documentum administrator:
+The docbroker is the entry point to Documentum. The connect request chooses it: the `docbroker` and `port` of `POST /api/v1/connect` decide which environment the session connects to. The `dfc.docbroker.*` entries of `dfc.properties` are not used to route a connect, and a docbroker that is in no `dfc.properties` can be used.
 
-| Property | Description |
-|----------|-------------|
-| `dfc.docbroker.host[0]` | Docbroker hostname or IP |
-| `dfc.docbroker.port[0]` | Docbroker port (default: 1489) |
-
-Multiple docbrokers can be configured:
-```properties
-dfc.docbroker.host[0]=primary-docbroker.example.com
-dfc.docbroker.port[0]=1489
-dfc.docbroker.host[1]=backup-docbroker.example.com
-dfc.docbroker.port[1]=1489
-```
+The bridge holds one DFC instance per docbroker host and port. Each instance gets its own `dfc.properties`, which lists only that docbroker, so one bridge can hold sessions to several environments at the same time, including two environments with the same repository name and ID. The host is used as given: `cs23` and `192.168.0.110` are two instances, even when they name the same docbroker.
 
 ### dmcl.ini (Windows)
 
@@ -158,41 +143,28 @@ cache_queries=T
 
 ## Classpath Setup
 
-### Critical: Classpath Order
+### DFC Is Not on the Classpath
 
-DFC has specific classpath requirements. The order matters:
+The classpath holds only the bridge classes and the Spring Boot libraries. The bridge loads DFC itself, once per docbroker, from two arguments:
 
-1. **DFC log4j JARs first** - DFC's log4j must load before Spring Boot's
-2. **DFC config directory** - Contains dfc.properties
-3. **DFC libraries** - All other DFC JARs except `servlet-api.jar`. The `servlet-api.jar` in a Documentum `shared` folder is an older Servlet API than the one the embedded Tomcat needs, and it breaks Tomcat's error page.
-4. **Application classes** - DFC Bridge code
-5. **Spring Boot libraries** - Framework dependencies
+| Argument | Description |
+|----------|-------------|
+| `--dfc.home` | The folder that holds the DFC JARs (`DFC_HOME`) |
+| `--dfc.config` | The folder that holds `dfc.properties` and `dfc.keystore` (`DFC_CONFIG`) |
 
-### Log4j Conflict Resolution
+The startup scripts pass both in DFC mode and neither in no-DFC mode. Without `--dfc.home`, or when it holds no `dfc.jar`, the bridge starts in degraded mode.
 
-DFC uses log4j 1.x, while Spring Boot uses log4j 2.x via SLF4J. To avoid conflicts:
+Each DFC instance has its own classloader over every JAR in `--dfc.home` except `servlet-api*.jar`. The `servlet-api.jar` in a Documentum `shared` folder is an older Servlet API than the one the embedded Tomcat needs. DFC's log4j is only inside these classloaders, so it does not conflict with Spring Boot's logging.
 
-1. **Exclude `log4j-to-slf4j` from Spring Boot** - This bridge conflicts with DFC's log4j
-2. **Load DFC's log4j first** - Ensure DFC's logging works correctly
+### The dfc-instances Folder
 
-The startup script handles this automatically.
+For each new docbroker host and port, the bridge writes `dfc-instances/<host>_<port>/` in its working directory (`run/` under the startup scripts):
 
-### Manual Classpath Example
+- `config/dfc.properties`: every setting of `<dfc.config>/dfc.properties` except the `dfc.docbroker.*` entries and `dfc.data.dir`, plus the requested docbroker and `dfc.data.dir` set to the `data` folder
+- `config/`: a copy of every other file of `<dfc.config>`, such as `dfc.keystore` and `log4j2.properties`
+- `data/`: the DFC data folder of that instance
 
-```bash
-# DFC JARs (log4j first!)
-DFC_CP="$DFC_HOME/log4j.jar:$DFC_HOME/log4j-1.2-api-2.17.1.jar"
-for jar in $DFC_HOME/*.jar; do
-    case "$jar" in
-        *log4j*) ;;  # Skip, already added
-        */servlet-api*.jar) ;;  # Skip, older Servlet API than Tomcat's
-        *) DFC_CP="$DFC_CP:$jar" ;;
-    esac
-done
-
-# Full classpath
-CP="$DFC_CP:$DFC_CONFIG:BOOT-INF/classes:BOOT-INF/lib/*"
-```
+In the folder name, any character of the host that is not a letter, a digit, `.` or `-` becomes `_`. The `config` folder is written again the first time the bridge connects through that docbroker after a start, so a change to `<dfc.config>` takes effect on the next start. The `data` folder is kept between restarts. An instance stays loaded until the bridge stops, including one created by a connect that failed.
 
 ---
 
@@ -239,29 +211,17 @@ start-dfc-bridge.cmd --port=8080
 
 ### Manual Invocation
 
-The bridge writes `logs/` under its working directory.
+The bridge writes `logs/` and `dfc-instances/` under its working directory.
 
 ```bash
 unzip dfc-bridge-*.jar -d <directory>
 cd <directory>
 
-# Build classpath (DFC log4j first)
-DFC_CP=""
-for jar in $DFC_HOME/log4j*.jar; do
-    DFC_CP="$DFC_CP:$jar"
-done
-for jar in $DFC_HOME/*.jar; do
-    case "$jar" in *log4j*|*/servlet-api*.jar) ;; *) DFC_CP="$DFC_CP:$jar" ;; esac
-done
-
-# Build boot classpath (exclude log4j-to-slf4j)
-BOOT_CP=""
+# Classpath: the bridge classes and the Spring Boot libraries, no DFC
+CP="BOOT-INF/classes"
 for jar in BOOT-INF/lib/*.jar; do
-    case "$jar" in *log4j-to-slf4j*) ;; *) BOOT_CP="$BOOT_CP:$jar" ;; esac
+    CP="$CP:$jar"
 done
-
-# Full classpath
-CP="$DFC_CP:$DFC_CONFIG:BOOT-INF/classes:$BOOT_CP"
 
 # Run with Java 17+ add-opens for DFC compatibility
 java \
@@ -274,8 +234,12 @@ java \
   --add-opens java.base/java.io=ALL-UNNAMED \
   --add-opens java.base/java.security=ALL-UNNAMED \
   -cp "$CP" \
-  com.spirecentral.dfcbridge.DfcBridgeApplication
+  com.spirecentral.dfcbridge.DfcBridgeApplication \
+  --dfc.home="$DFC_HOME" \
+  --dfc.config="$DFC_CONFIG"
 ```
+
+Pass `--dfc.home` and `--dfc.config` as absolute paths, or as paths relative to the working directory.
 
 ### Java 17+ Module Access
 
@@ -321,21 +285,20 @@ Expected response when DFC is available:
 
 ### ClassNotFoundException: com.documentum.fc.client.DfClient
 
-**Cause:** DFC JARs not on classpath
+**Cause:** `--dfc.home` holds `dfc.jar`, but not every JAR DFC needs. Connect returns 503 with `DFC classes not found in dfc.home`.
 
 **Solution:**
-1. Verify `$DFC_HOME` points to directory containing `dfc.jar`
-2. Check the startup script is building the classpath correctly
+1. Verify `$DFC_HOME` holds the required JARs listed under [Required JARs](#required-jars)
+2. Run `./start-dfc-bridge.sh --verify` to check the setup
 3. Run in no-DFC mode to verify the app itself works: `./start-dfc-bridge.sh --mode=nodfc`
 
 ### NoClassDefFoundError: org/apache/log4j/Logger
 
-**Cause:** Log4j conflict between DFC and Spring Boot
+**Cause:** The log4j JARs are missing from `--dfc.home`. DFC loads log4j from its own classloader, which holds only the JARs in `--dfc.home`.
 
 **Solution:**
-1. Ensure DFC's log4j JARs are loaded FIRST in the classpath
-2. Exclude `log4j-to-slf4j` from the Spring Boot classpath
-3. Use the provided startup script which handles this
+1. Copy the log4j JARs of the DFC installation into `$DFC_HOME`
+2. Run `./start-dfc-bridge.sh --verify` to check that they are found
 
 ### InaccessibleObjectException / IllegalAccessError
 
@@ -345,19 +308,19 @@ Expected response when DFC is available:
 
 ### DFC_UNAVAILABLE - DFC libraries are not available
 
-**Cause:** Application started but DFC classes not found
+**Cause:** The bridge started in degraded mode: `--dfc.home` is not set, or it holds no `dfc.jar`
 
 **Solution:**
-1. Check the `/api/v1/status` endpoint for details
-2. Verify DFC JARs are on classpath
-3. Check startup logs for classpath information
+1. Check the `/api/v1/status` endpoint for the reason (`dfc.home is not set`, or `dfc.jar not found in <path>`)
+2. Start with the startup script in DFC mode, which passes `--dfc.home`, and verify `DFC_HOME` holds `dfc.jar`
+3. Check the startup log for the DFC location
 
 ### Connection refused to docbroker
 
 **Cause:** Cannot reach the docbroker
 
 **Solution:**
-1. Verify docbroker host and port in `dfc.properties`
+1. Verify the `docbroker` and `port` in the connect request
 2. Test network connectivity: `telnet docbroker.example.com 1489`
 3. Check firewall rules
 4. Verify docbroker is running on the Content Server
