@@ -312,6 +312,14 @@ dfc-bridge/
 mvn test
 ```
 
+To run the tests with the static analysis and the coverage report:
+
+```bash
+mvn verify
+```
+
+`mvn verify` also runs SpotBugs, which fails the build on any item that `spotbugs-exclude.xml` does not cover, and writes the coverage report to `target/site/jacoco/index.html`.
+
 ## Graceful Degradation
 
 The bridge can start without DFC libraries. When DFC is unavailable:

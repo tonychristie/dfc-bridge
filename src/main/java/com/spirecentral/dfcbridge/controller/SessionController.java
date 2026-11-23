@@ -1,5 +1,6 @@
 package com.spirecentral.dfcbridge.controller;
 
+import com.spirecentral.dfcbridge.config.ErrorResponses;
 import com.spirecentral.dfcbridge.dto.ConnectRequest;
 import com.spirecentral.dfcbridge.dto.ConnectResponse;
 import com.spirecentral.dfcbridge.dto.DisconnectRequest;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1")
 @Tag(name = "Session", description = "DFC session management operations")
+@ErrorResponses
 public class SessionController {
 
     private final DfcSessionService sessionService;
@@ -43,13 +45,23 @@ public class SessionController {
             content = @Content(schema = @Schema(implementation = ConnectResponse.class))
         ),
         @ApiResponse(
-            responseCode = "503",
-            description = "Connection failed",
+            responseCode = "400",
+            description = "Invalid request, or no docbroker",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         ),
         @ApiResponse(
-            responseCode = "400",
-            description = "Invalid request",
+            responseCode = "401",
+            description = "Wrong user name or password",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        ),
+        @ApiResponse(
+            responseCode = "502",
+            description = "Other DFC error",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+        ),
+        @ApiResponse(
+            responseCode = "503",
+            description = "Docbroker or repository unreachable, or DFC unavailable",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         )
     })
@@ -64,10 +76,10 @@ public class SessionController {
         description = "Closes an existing DFC session and releases all associated resources"
     )
     @ApiResponses({
-        @ApiResponse(responseCode = "204", description = "Session closed successfully"),
+        @ApiResponse(responseCode = "204", description = "Session closed, or no session had the id"),
         @ApiResponse(
-            responseCode = "404",
-            description = "Session not found",
+            responseCode = "400",
+            description = "Invalid request",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         )
     })
@@ -89,7 +101,7 @@ public class SessionController {
         ),
         @ApiResponse(
             responseCode = "404",
-            description = "Session not found",
+            description = "Session not found or expired",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         )
     })

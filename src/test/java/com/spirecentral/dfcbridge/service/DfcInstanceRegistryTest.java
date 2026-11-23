@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -156,6 +157,162 @@ class DfcInstanceRegistryTest {
         registry.loaderFor("cs23:tst/a b", 1489);
 
         assertTrue(Files.isRegularFile(instancesDir.resolve("cs23_tst_a_b_1489/config/dfc.properties")));
+    }
+
+    @Test
+    void loaderFor_keepsGlobalDocbrokerSettingsAndDropsIndexedEntries() throws IOException {
+        writeConfig("dfc.properties",
+                "dfc.docbroker.search_order=sequential",
+                "dfc.docbroker.exclusion.time=30",
+                "dfc.docbroker.host[0]=192.168.0.110",
+                "dfc.docbroker.port[0]=1489",
+                "dfc.docbroker.timeout[0]=10");
+
+        registry.loaderFor("cs23", 1489);
+
+        Properties generated = generatedProperties();
+        assertEquals("sequential", generated.getProperty("dfc.docbroker.search_order"));
+        assertEquals("30", generated.getProperty("dfc.docbroker.exclusion.time"));
+        assertNull(generated.getProperty("dfc.docbroker.timeout[0]"));
+        assertEquals("cs23", generated.getProperty("dfc.docbroker.host[0]"));
+    }
+
+    @Test
+    void loaderFor_keyWithColonOrSpacesAroundEquals_isRecognised() throws IOException {
+        writeConfig("dfc.properties",
+                "  dfc.docbroker.host[1]:192.168.0.112",
+                "dfc.data.dir = /opt/documentum",
+                "dfc.docbroker.port[1]    1489");
+
+        registry.loaderFor("cs23", 1489);
+
+        List<String> lines = generatedLines();
+        assertFalse(lines.contains("  dfc.docbroker.host[1]:192.168.0.112"));
+        assertFalse(lines.contains("dfc.data.dir = /opt/documentum"));
+        assertFalse(lines.contains("dfc.docbroker.port[1]    1489"));
+    }
+
+    @Test
+    void loaderFor_continuedLineOfADroppedEntry_isDroppedWithIt() throws IOException {
+        writeConfig("dfc.properties",
+                "dfc.docbroker.host[1]=192.168.\\",
+                "    0.112",
+                "dfc.globalregistry.repository=EDMS");
+
+        registry.loaderFor("cs23", 1489);
+
+        assertFalse(generatedLines().contains("    0.112"));
+        assertEquals("EDMS", generatedProperties().getProperty("dfc.globalregistry.repository"));
+    }
+
+    @Test
+    void loaderFor_relativeInclude_expandsTheFileWithoutItsDocbrokerOrDataDir() throws IOException {
+        writeConfig("shared.properties",
+                "dfc.date_format=dd/MM/yyyy HH:mm:ss",
+                "dfc.docbroker.host[1]=192.168.0.111",
+                "dfc.data.dir=/opt/documentum");
+        writeConfig("dfc.properties",
+                "#include shared.properties",
+                "dfc.globalregistry.repository=EDMS");
+
+        registry.loaderFor("cs23", 1489);
+
+        Properties generated = generatedProperties();
+        assertEquals("dd/MM/yyyy HH:mm:ss", generated.getProperty("dfc.date_format"));
+        assertEquals("EDMS", generated.getProperty("dfc.globalregistry.repository"));
+        assertNull(generated.getProperty("dfc.docbroker.host[1]"));
+        assertNotEquals("/opt/documentum", generated.getProperty("dfc.data.dir"));
+        assertTrue(generatedLines().stream().noneMatch(line -> line.startsWith("#include")));
+    }
+
+    @Test
+    void loaderFor_absoluteIncludeOutsideDfcConfigAndNestedInclude_areExpanded() throws IOException {
+        Path outside = Files.createDirectory(tempDir.resolve("outside"));
+        Files.writeString(outside.resolve("nested.properties"), "dfc.tracing.enable=true\n");
+        Files.writeString(outside.resolve("shared.properties"),
+                "#include nested.properties\ndfc.date_format=dd/MM/yyyy\n");
+        writeConfig("dfc.properties", "#include " + outside.resolve("shared.properties").toAbsolutePath());
+
+        registry.loaderFor("cs23", 1489);
+
+        Properties generated = generatedProperties();
+        assertEquals("dd/MM/yyyy", generated.getProperty("dfc.date_format"));
+        assertEquals("true", generated.getProperty("dfc.tracing.enable"));
+    }
+
+    @Test
+    void loaderFor_missingIncludeFile_isSkippedAndTheFileIsWritten() throws IOException {
+        writeConfig("dfc.properties",
+                "#include no-such-file.properties",
+                "dfc.globalregistry.repository=EDMS");
+
+        registry.loaderFor("cs23", 1489);
+
+        Properties generated = generatedProperties();
+        assertEquals("EDMS", generated.getProperty("dfc.globalregistry.repository"));
+        assertEquals("cs23", generated.getProperty("dfc.docbroker.host[0]"));
+    }
+
+    @Test
+    void loaderFor_fileThatIncludesItself_isExpandedOnce() throws IOException {
+        writeConfig("dfc.properties",
+                "#include dfc.properties",
+                "dfc.globalregistry.repository=EDMS");
+
+        registry.loaderFor("cs23", 1489);
+
+        assertEquals(1, generatedLines().stream()
+                .filter(line -> line.equals("dfc.globalregistry.repository=EDMS"))
+                .count());
+    }
+
+    @Test
+    void loaderFor_commentsAndEscapedValues_areCopiedUnchanged() throws IOException {
+        writeConfig("dfc.properties",
+                "# Documentum settings",
+                "",
+                "! tracing",
+                "dfc.tracing.dir=C\\:/Documentum/logs");
+
+        registry.loaderFor("cs23", 1489);
+
+        assertEquals(List.of("# Documentum settings", "", "! tracing", "dfc.tracing.dir=C\\:/Documentum/logs"),
+                generatedLines().subList(0, 4));
+    }
+
+    @Test
+    void loaderFor_generatedFile_namesOnlyTheRequestedDocbrokerAndTheInstanceDataDir() throws IOException {
+        writeConfig("dfc.properties",
+                "dfc.docbroker.host[0]=192.168.0.110",
+                "dfc.docbroker.port[0]=1489",
+                "dfc.data.dir=C\\:/Documentum");
+
+        registry.loaderFor("cs23", 1490);
+
+        Properties generated = load(instancesDir.resolve("cs23_1490/config/dfc.properties"));
+        Set<String> docbrokerKeys = new HashSet<>();
+        for (String key : generated.stringPropertyNames()) {
+            if (key.startsWith("dfc.docbroker.")) {
+                docbrokerKeys.add(key);
+            }
+        }
+        assertEquals(Set.of("dfc.docbroker.host[0]", "dfc.docbroker.port[0]"), docbrokerKeys);
+        assertEquals("cs23", generated.getProperty("dfc.docbroker.host[0]"));
+        assertEquals("1490", generated.getProperty("dfc.docbroker.port[0]"));
+        assertEquals(instancesDir.resolve("cs23_1490/data").toAbsolutePath().toString(),
+                generated.getProperty("dfc.data.dir"));
+    }
+
+    private void writeConfig(String fileName, String... lines) throws IOException {
+        Files.writeString(dfcConfig.resolve(fileName), String.join("\n", lines) + "\n");
+    }
+
+    private Properties generatedProperties() throws IOException {
+        return load(instancesDir.resolve("cs23_1489/config/dfc.properties"));
+    }
+
+    private List<String> generatedLines() throws IOException {
+        return Files.readAllLines(instancesDir.resolve("cs23_1489/config/dfc.properties"), StandardCharsets.ISO_8859_1);
     }
 
     private static Properties load(Path file) throws IOException {

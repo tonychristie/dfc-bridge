@@ -172,7 +172,7 @@ class ObjectControllerTest {
     @Test
     void testListFolderContents_NotFound() throws Exception {
         when(objectService.listFolderContents("session-123", "/NonExistent"))
-                .thenThrow(new ObjectNotFoundException("Folder not found: /NonExistent"));
+                .thenThrow(ObjectNotFoundException.withMessage("Folder not found: /NonExistent"));
 
         mockMvc.perform(get("/api/v1/folders/NonExistent")
                         .param("sessionId", "session-123"))
@@ -246,7 +246,7 @@ class ObjectControllerTest {
     @Test
     void testGetTypeInfo_NotFound() throws Exception {
         when(objectService.getTypeInfo("session-123", "nonexistent_type"))
-                .thenThrow(new ObjectNotFoundException("Type not found: nonexistent_type"));
+                .thenThrow(ObjectNotFoundException.withMessage("Type not found: nonexistent_type"));
 
         mockMvc.perform(get("/api/v1/types/nonexistent_type")
                         .param("sessionId", "session-123"))

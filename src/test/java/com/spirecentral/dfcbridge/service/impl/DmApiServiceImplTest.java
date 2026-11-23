@@ -12,6 +12,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.lang.reflect.InvocationTargetException;
+import java.util.Locale;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -46,6 +47,30 @@ class DmApiServiceImplTest {
     private void stubSession(Object dfSession) {
         when(sessionService.withSession(eq("test-session"), any())).thenAnswer(
                 invocation -> invocation.<Function<Object, Object>>getArgument(1).apply(dfSession));
+    }
+
+    // ========== default locale tests ==========
+
+    @Test
+    void turkishDefaultLocale_upperCaseSessionPlaceholderIsStripped() {
+        Locale defaultLocale = Locale.getDefault();
+        Locale.setDefault(Locale.forLanguageTag("tr-TR"));
+        try {
+            MockDfSession mockSession = new MockDfSession();
+            stubSession(mockSession);
+            DmApiRequest request = DmApiRequest.builder()
+                    .sessionId("test-session")
+                    .apiType("get")
+                    .command("get,SESSION,0900000180000001")
+                    .build();
+
+            dmApiService.execute(request);
+
+            assertTrue(dmApiService.isSessionIdentifier("SESSION"));
+            assertEquals("0900000180000001", mockSession.getLastApiGetArgs());
+        } finally {
+            Locale.setDefault(defaultLocale);
+        }
     }
 
     // ========== apiGet tests ==========
@@ -682,6 +707,11 @@ class DmApiServiceImplTest {
 
         @Override
         public Object getFolderByPath(String folderPath) {
+            return null;
+        }
+
+        @Override
+        public Object newObject(String typeName) {
             return null;
         }
 

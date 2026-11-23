@@ -1,5 +1,6 @@
 package com.spirecentral.dfcbridge.controller;
 
+import com.spirecentral.dfcbridge.config.ErrorResponses;
 import com.spirecentral.dfcbridge.service.DfcAvailabilityService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -18,6 +19,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1")
 @Tag(name = "Status", description = "Bridge status and capability information")
+@ErrorResponses
 public class StatusController {
 
     private final DfcAvailabilityService dfcAvailability;

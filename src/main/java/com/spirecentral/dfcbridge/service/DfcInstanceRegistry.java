@@ -6,21 +6,26 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.StringReader;
 import java.io.UncheckedIOException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
@@ -35,6 +40,9 @@ public class DfcInstanceRegistry {
     private static final String DFC_PROPERTIES = "dfc.properties";
     private static final String DOCBROKER_PREFIX = "dfc.docbroker.";
     private static final String DATA_DIR = "dfc.data.dir";
+    private static final String INCLUDE = "#include";
+    private static final Pattern INCLUDE_LINE = Pattern.compile("#include\\s+\\S.*");
+    private static final Pattern INDEXED_DOCBROKER_KEY = Pattern.compile("dfc\\.docbroker\\.[a-z_]+\\[\\d+\\]");
 
     private final Map<List<Object>, ClassLoader> loaders = new ConcurrentHashMap<>();
     private final String dfcHome;
@@ -80,22 +88,98 @@ public class DfcInstanceRegistry {
     }
 
     private void writeDfcProperties(Path configDir, Path dataDir, String host, int port) throws IOException {
-        Properties properties = new Properties();
+        List<String> lines = new ArrayList<>();
         Optional<Path> source = configFile(DFC_PROPERTIES);
         if (source.isPresent()) {
-            try (InputStream in = Files.newInputStream(source.get())) {
-                properties.load(in);
+            expand(source.get().toAbsolutePath().normalize(), new HashSet<>(), lines);
+        }
+
+        Properties entries = new Properties();
+        entries.setProperty(DOCBROKER_PREFIX + "host[0]", host);
+        entries.setProperty(DOCBROKER_PREFIX + "port[0]", String.valueOf(port));
+        entries.setProperty(DATA_DIR, dataDir.toString());
+        ByteArrayOutputStream stored = new ByteArrayOutputStream();
+        entries.store(stored, null);
+        stored.toString(StandardCharsets.ISO_8859_1).lines()
+                .filter(line -> !line.startsWith("#"))
+                .forEach(lines::add);
+
+        Files.write(configDir.resolve(DFC_PROPERTIES), lines, StandardCharsets.ISO_8859_1);
+    }
+
+    private void expand(Path file, Set<Path> chain, List<String> out) throws IOException {
+        List<String> physicalLines = Files.readAllLines(file, StandardCharsets.ISO_8859_1);
+        chain.add(file);
+        for (List<String> logicalLine : logicalLines(physicalLines)) {
+            String first = logicalLine.get(0).strip();
+            if (INCLUDE_LINE.matcher(first).matches()) {
+                expandInclude(file, first.substring(INCLUDE.length()).strip(), chain, out);
+            } else if (!isDroppedKey(logicalLine)) {
+                out.addAll(logicalLine);
             }
         }
-        properties.stringPropertyNames().stream()
-                .filter(key -> key.startsWith(DOCBROKER_PREFIX))
-                .forEach(properties::remove);
-        properties.setProperty(DOCBROKER_PREFIX + "host[0]", host);
-        properties.setProperty(DOCBROKER_PREFIX + "port[0]", String.valueOf(port));
-        properties.setProperty(DATA_DIR, dataDir.toString());
-        try (OutputStream out = Files.newOutputStream(configDir.resolve(DFC_PROPERTIES))) {
-            properties.store(out, null);
+        chain.remove(file);
+    }
+
+    private void expandInclude(Path includingFile, String includePath, Set<Path> chain, List<String> out) {
+        Path included;
+        try {
+            included = includingFile.resolveSibling(includePath).toAbsolutePath().normalize();
+        } catch (InvalidPathException e) {
+            log.warn("Skipped the include {} in {}: {}", includePath, includingFile, e.getMessage());
+            return;
         }
+        if (chain.contains(included)) {
+            log.warn("Skipped the include {} in {}: the file is already being included", included, includingFile);
+            return;
+        }
+        try {
+            expand(included, chain, out);
+        } catch (IOException e) {
+            log.warn("Skipped the include {} in {}: the file cannot be read ({})", included, includingFile, e.toString());
+        }
+    }
+
+    // Groups physical lines as java.util.Properties does: an odd number of trailing backslashes continues a line
+    private static List<List<String>> logicalLines(List<String> physicalLines) {
+        List<List<String>> logicalLines = new ArrayList<>();
+        List<String> current = null;
+        for (String line : physicalLines) {
+            if (current == null) {
+                current = new ArrayList<>();
+                logicalLines.add(current);
+            }
+            boolean comment = current.isEmpty() && isCommentOrBlank(line);
+            current.add(line);
+            if (comment || !continues(line)) {
+                current = null;
+            }
+        }
+        return logicalLines;
+    }
+
+    private static boolean isCommentOrBlank(String line) {
+        String text = line.stripLeading();
+        return text.isEmpty() || text.startsWith("#") || text.startsWith("!");
+    }
+
+    private static boolean continues(String line) {
+        int backslashes = 0;
+        for (int i = line.length() - 1; i >= 0 && line.charAt(i) == '\\'; i--) {
+            backslashes++;
+        }
+        return backslashes % 2 != 0;
+    }
+
+    private static boolean isDroppedKey(List<String> logicalLine) throws IOException {
+        Properties properties = new Properties();
+        properties.load(new StringReader(String.join("\n", logicalLine)));
+        for (String key : properties.stringPropertyNames()) {
+            if (key.equals(DATA_DIR) || INDEXED_DOCBROKER_KEY.matcher(key).matches()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void copyConfigFiles(Path configDir) throws IOException {

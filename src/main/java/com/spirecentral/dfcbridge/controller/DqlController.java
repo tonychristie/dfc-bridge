@@ -1,7 +1,7 @@
 package com.spirecentral.dfcbridge.controller;
 
+import com.spirecentral.dfcbridge.config.ErrorResponses;
 import com.spirecentral.dfcbridge.dto.DqlRequest;
-import com.spirecentral.dfcbridge.dto.ErrorResponse;
 import com.spirecentral.dfcbridge.model.QueryResult;
 import com.spirecentral.dfcbridge.service.DqlService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1")
 @Tag(name = "DQL", description = "DQL query execution")
+@ErrorResponses(session = true)
 public class DqlController {
 
     private final DqlService dqlService;
@@ -39,16 +40,6 @@ public class DqlController {
             responseCode = "200",
             description = "Query executed successfully",
             content = @Content(schema = @Schema(implementation = QueryResult.class))
-        ),
-        @ApiResponse(
-            responseCode = "400",
-            description = "Invalid DQL query",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-        ),
-        @ApiResponse(
-            responseCode = "404",
-            description = "Session not found",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         )
     })
     public ResponseEntity<QueryResult> executeQuery(@Valid @RequestBody DqlRequest request) {
