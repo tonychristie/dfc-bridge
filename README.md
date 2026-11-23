@@ -48,7 +48,7 @@ Client Application (e.g., VS Code Extension)
 # Build with Maven
 mvn clean package
 
-# The JAR will be in target/dfc-bridge-1.2.0.jar
+# The JAR will be in target/dfc-bridge-2.0.0.jar
 ```
 
 ## Running
@@ -156,7 +156,7 @@ SERVER_ADDRESS=0.0.0.0 ./start-dfc-bridge.sh
 
 **With `java -jar`:**
 ```bash
-java -jar dfc-bridge-1.2.0.jar --server.address=0.0.0.0
+java -jar dfc-bridge-2.0.0.jar --server.address=0.0.0.0
 ```
 
 ### Port Configuration
@@ -165,13 +165,13 @@ The default port is **9876**. Override using any of these methods:
 
 **Command line argument:**
 ```bash
-java -jar dfc-bridge-1.2.0.jar --server.port=8080
+java -jar dfc-bridge-2.0.0.jar --server.port=8080
 ```
 
 **Environment variable:**
 ```bash
 export SERVER_PORT=8080
-java -jar dfc-bridge-1.2.0.jar
+java -jar dfc-bridge-2.0.0.jar
 ```
 
 **application.yml override:**
@@ -216,10 +216,43 @@ Once running, access the Swagger UI at:
 |--------|----------|-------------|
 | GET | `/api/v1/objects/{id}` | Get object by r_object_id |
 | POST | `/api/v1/objects/{id}` | Update object attributes |
-| GET | `/api/v1/folders/{path}` | List folder contents |
-| GET | `/api/v1/types` | List object types |
+| POST | `/api/v1/objects` | Create object (201) |
+| DELETE | `/api/v1/objects/{id}` | Delete object (204); `allVersions` deletes every version |
+| PUT | `/api/v1/objects/{id}/lock` | Check out object |
+| DELETE | `/api/v1/objects/{id}/lock` | Cancel checkout (204) |
+| POST | `/api/v1/objects/{id}/versions` | Check in object; `versionLabel` defaults to `CURRENT` |
+| GET | `/api/v1/cabinets` | List cabinets |
+| GET | `/api/v1/objects/{id}/contents` | List folder contents by folder ID |
+| GET | `/api/v1/folders/{path}` | List folder contents by path |
+| GET | `/api/v1/types` | List object types (`pattern`) |
 | GET | `/api/v1/types/{typeName}` | Get type info |
-| POST | `/api/v1/api` | Execute arbitrary DFC method |
+
+### DFC API and dmAPI
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/api` | Execute a DFC method |
+| POST | `/api/v1/dmapi` | Execute a dmAPI command (dmAPIGet, dmAPIExec, dmAPISet) |
+
+### Users and Groups
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/users` | List users (`pattern`) |
+| GET | `/api/v1/users/{userName}` | Get user |
+| GET | `/api/v1/users/{userName}/groups` | Get groups for user |
+| GET | `/api/v1/groups` | List groups (`pattern`) |
+| GET | `/api/v1/groups/{groupName}` | Get group |
+
+### Status
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/status` | Get bridge status: mode `full` or `degraded` |
+| GET | `/status` | Redirect to `/api/v1/status` |
+| GET | `/health` | Health check, returns `{"status": "ok"}` |
+
+Every endpoint under `/api/v1` except connect, disconnect, the session paths and `/status` needs a `sessionId`: as a query parameter, or in the request body of `POST /dql`, `POST /objects/{id}`, `POST /objects`, `POST /api` and `POST /dmapi`.
 
 ## Usage Examples
 
@@ -286,23 +319,35 @@ curl http://localhost:9876/actuator/health
 
 ```
 dfc-bridge/
-├── src/main/java/com/spire/dfcbridge/
+├── src/main/java/com/spirecentral/dfcbridge/
 │   ├── DfcBridgeApplication.java       # Main application
 │   ├── config/                          # Configuration classes
 │   ├── controller/                      # REST controllers
 │   │   ├── SessionController.java
 │   │   ├── DqlController.java
-│   │   └── ObjectController.java
+│   │   ├── ObjectController.java
+│   │   ├── UserGroupController.java
+│   │   ├── StatusController.java
+│   │   └── RedirectController.java
 │   ├── dto/                             # Request/Response DTOs
 │   ├── exception/                       # Exception handling
 │   ├── model/                           # Domain models
-│   └── service/                         # Business logic
-│       ├── DfcSessionService.java
-│       ├── DqlService.java
-│       ├── ObjectService.java
-│       └── impl/                        # Service implementations
+│   ├── service/                         # Business logic
+│   │   ├── DfcSessionService.java
+│   │   ├── DqlService.java
+│   │   ├── ObjectService.java
+│   │   ├── DmApiService.java
+│   │   ├── UserGroupService.java
+│   │   ├── DfcAvailabilityService.java
+│   │   ├── DfcInstanceRegistry.java    # One DFC instance per docbroker
+│   │   └── impl/                        # Service implementations
+│   └── util/                            # DFC reflection, query and error helpers
 ├── src/main/resources/
 │   └── application.yml                  # Configuration
+├── start-dfc-bridge.sh                  # Startup script (Linux)
+├── start-dfc-bridge.cmd                 # Startup script (Windows), runs start-dfc-bridge.ps1
+├── start-dfc-bridge.ps1
+├── spotbugs-exclude.xml                 # SpotBugs items triaged as not to fix
 └── pom.xml                              # Maven build file
 ```
 
