@@ -33,7 +33,7 @@ class DfcTypeUtilsTest {
             "0, getBoolean",
             "1, getInt",
             "2, getString",
-            "3, getId",
+            "3, getString",
             "4, getTime",
             "5, getDouble",
             "6, getString"
@@ -47,7 +47,7 @@ class DfcTypeUtilsTest {
             "0, getRepeatingBoolean",
             "1, getRepeatingInt",
             "2, getRepeatingString",
-            "3, getRepeatingId",
+            "3, getRepeatingString",
             "4, getRepeatingTime",
             "5, getRepeatingDouble",
             "6, getRepeatingString"

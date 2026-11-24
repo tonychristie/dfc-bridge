@@ -29,6 +29,7 @@ public final class DfcTypeUtils {
 
     /**
      * Returns the name of the DFC getter that reads a single value of a data type.
+     * An ID value is read as text with getString.
      *
      * @param dataType the DFC data type constant
      * @return the getter name, getString for an unknown type
@@ -37,7 +38,6 @@ public final class DfcTypeUtils {
         return switch (dataType) {
             case 0 -> "getBoolean";
             case 1 -> "getInt";
-            case 3 -> "getId";
             case 4 -> "getTime";
             case 5 -> "getDouble";
             default -> "getString";
@@ -46,6 +46,7 @@ public final class DfcTypeUtils {
 
     /**
      * Returns the name of the DFC getter that reads one value of a repeating attribute of a data type.
+     * An ID value is read as text with getRepeatingString.
      *
      * @param dataType the DFC data type constant
      * @return the getter name, getRepeatingString for an unknown type
@@ -54,7 +55,6 @@ public final class DfcTypeUtils {
         return switch (dataType) {
             case 0 -> "getRepeatingBoolean";
             case 1 -> "getRepeatingInt";
-            case 3 -> "getRepeatingId";
             case 4 -> "getRepeatingTime";
             case 5 -> "getRepeatingDouble";
             default -> "getRepeatingString";

@@ -52,7 +52,6 @@ public class ObjectServiceImpl implements ObjectService {
 
     private static final int DM_INTEGER = 1;
     private static final int DM_STRING = 2;
-    private static final int DM_ID = 3;
     private static final int DM_TIME = 4;
     private static final int DM_DOUBLE = 5;
 
@@ -579,9 +578,7 @@ public class ObjectServiceImpl implements ObjectService {
     }
 
     private Object extractSingleAttributeValue(Object sysObject, String attrName, int dataType) throws Exception {
-        // getId returns an IDfId whose text can lose the leading zeros, so ids are read as text
-        String methodName = dataType == DM_ID ? "getString" : DfcTypeUtils.getterName(dataType);
-        Object value = DfcReflection.invoke(sysObject, methodName, STRING_PARAM, attrName);
+        Object value = DfcReflection.invoke(sysObject, DfcTypeUtils.getterName(dataType), STRING_PARAM, attrName);
 
         // Convert IDfTime to string for JSON serialization
         if (value != null && dataType == DM_TIME) {
@@ -595,8 +592,7 @@ public class ObjectServiceImpl implements ObjectService {
         int count = (Integer) DfcReflection.invoke(sysObject, "getValueCount", STRING_PARAM, attrName);
         List<Object> values = new ArrayList<>();
 
-        // getRepeatingId returns an IDfId whose text can lose the leading zeros, so ids are read as text
-        String methodName = dataType == DM_ID ? "getRepeatingString" : DfcTypeUtils.repeatingGetterName(dataType);
+        String methodName = DfcTypeUtils.repeatingGetterName(dataType);
 
         for (int i = 0; i < count; i++) {
             Object value = DfcReflection.invoke(sysObject, methodName, STRING_INT_PARAMS, attrName, i);
