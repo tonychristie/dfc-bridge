@@ -43,6 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Every file of the DFC config folder, such as `log4j2.properties`, is copied into each DFC instance
 - `servlet-api.jar` in `DFC_HOME` is left off the DFC classpath
 - The start script extracts the jar again whenever it has changed, refuses a second start while the bridge is running, keeps its files and logs in `run/`, and `--verify` reports every missing item
+- A DQL result column of type ID, such as `object_created` from `create ... object`, returns the object ID text in place of the DFC id object
 
 ### Removed
 - `dfcProfile` on connect and `namedArgs` on `/api`, which had no effect. Clients that still send them are not affected

@@ -99,6 +99,25 @@ class DqlServiceImplTest {
                 result.getRows());
     }
 
+    @Test
+    void executeQuery_idColumn_returnsObjectIdText() {
+        QueryResult result = executeOver(new RowCollection(
+                Map.of("object_created", "090471998000ca3a"))
+                .column("object_created", 3, false));
+
+        assertEquals(List.of(Map.of("object_created", "090471998000ca3a")), result.getRows());
+    }
+
+    @Test
+    void executeQuery_repeatingIdColumn_returnsListOfObjectIdTexts() {
+        QueryResult result = executeOver(new RowCollection(
+                Map.of("i_folder_id", List.of("0c04719980000107", "0c04719980000108")))
+                .column("i_folder_id", 3, true));
+
+        assertEquals(List.of(Map.of("i_folder_id", List.of("0c04719980000107", "0c04719980000108"))),
+                result.getRows());
+    }
+
     private QueryResult executeOver(RowCollection collection) {
         DfQuery.reset(dql -> collection);
         when(sessionService.withSession(eq("test-session"), any())).thenAnswer(
