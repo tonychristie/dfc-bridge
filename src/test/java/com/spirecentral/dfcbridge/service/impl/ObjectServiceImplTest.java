@@ -3,6 +3,7 @@ package com.spirecentral.dfcbridge.service.impl;
 import com.documentum.fc.client.DfIdNotFoundException;
 import com.documentum.fc.client.DfQuery;
 import com.documentum.fc.client.IDfCollection;
+import com.documentum.fc.client.IDfSysObject;
 import com.documentum.fc.common.DfException;
 import com.documentum.fc.common.DfId;
 import com.documentum.fc.common.DfRuntimeException;
@@ -944,6 +945,45 @@ class ObjectServiceImplTest {
         assertEquals(HttpStatus.NOT_FOUND, e.getStatus());
     }
 
+    @Test
+    void createObject_nonSysObjectWithName_is400AndSetsNothing() {
+        MockDfWritableObject relation = new MockDfWritableObject();
+        sessionCreating(relation);
+        CreateObjectRequest request = CreateObjectRequest.builder()
+                .sessionId("test-session")
+                .objectType("dm_relation")
+                .objectName("p1")
+                .build();
+
+        DfcBridgeException e = assertThrows(DfcBridgeException.class,
+                () -> objectService.createObject("test-session", request));
+
+        assertEquals("CREATE_ERROR", e.getCode());
+        assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
+        assertTrue(e.getMessage().contains("dm_relation"));
+        assertEquals(List.of(), relation.getCalls());
+    }
+
+    @Test
+    void createObject_nonSysObjectWithFolderPath_is400AndSetsNothing() {
+        MockDfWritableObject relation = new MockDfWritableObject();
+        sessionCreating(relation);
+        CreateObjectRequest request = CreateObjectRequest.builder()
+                .sessionId("test-session")
+                .objectType("dm_relation")
+                .attributes(Map.of("relation_name", "r1"))
+                .folderPath("/Temp")
+                .build();
+
+        DfcBridgeException e = assertThrows(DfcBridgeException.class,
+                () -> objectService.createObject("test-session", request));
+
+        assertEquals("CREATE_ERROR", e.getCode());
+        assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
+        assertTrue(e.getMessage().contains("dm_relation"));
+        assertEquals(List.of(), relation.getCalls());
+    }
+
     private MockDfSession sessionCreating(Object newObject) {
         MockDfSession session = new MockDfSession();
         session.setNewObject(newObject);
@@ -1822,7 +1862,7 @@ class ObjectServiceImplTest {
     /**
      * Mock document for create and version control, recording each DFC call.
      */
-    public static class MockDfDocument extends MockDfWritableObject {
+    public static class MockDfDocument extends MockDfWritableObject implements IDfSysObject {
         static final String OBJECT_ID = "0900000180000001";
         static final String NEW_VERSION_ID = "0900000180000002";
 

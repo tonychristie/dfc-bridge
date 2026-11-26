@@ -30,9 +30,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 - Concurrent requests on one session no longer use the DFC session at the same time. Each session is locked while a request runs, and cleanup and disconnect no longer release a session that a request is using
-- A request on a DFC session that is no longer connected returns 404 `SESSION_NOT_FOUND`
+- A request on a DFC session that is no longer connected returns 404 `SESSION_NOT_FOUND`, `GET /api/v1/session/{sessionId}` included, and `GET /api/v1/session/{sessionId}/valid` returns `false`. The bridge then removes the session
 - An update with `save=false`, or one that fails, no longer leaves its changes on the cached object for a later save to write
 - A value the bridge rejects (a list or an object for a single attribute, a time DFC cannot parse, an `/api` method with no overload that accepts the arguments) returns 400 in place of 500
+- `POST /api/v1/objects` for a type that is not a sysobject, such as `dm_relation`, returns 400 `CREATE_ERROR` in place of 500 when the request has `objectName` or `folderPath`
 - `GET /api/v1/users` no longer lists groups, and `GET /api/v1/users/{userName}` returns 404 `USER_NOT_FOUND` for a group name
 - Listing the contents of an object that is not a folder returns 404 in place of an empty list
 - Listing a folder by path no longer fails with "wrong number of arguments"
@@ -40,6 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - dmAPI commands recognise `SESSION` under any default locale
 - A missing file under `/swagger-ui/` returns 404 `NOT_FOUND` in place of 500
 - The instance `dfc.properties` keeps the global `dfc.docbroker.*` settings, such as `dfc.docbroker.search_order`, and the settings of each `#include` file. Only the indexed docbroker entries and `dfc.data.dir` are replaced
+- A line at the end of a `dfc.properties` file or an `#include` file that ends in a backslash no longer runs on into the next line of the instance `dfc.properties`
 - Every file of the DFC config folder, such as `log4j2.properties`, is copied into each DFC instance
 - `servlet-api.jar` in `DFC_HOME` is left off the DFC classpath
 - The start script extracts the jar again whenever it has changed, refuses a second start while the bridge is running, keeps its files and logs in `run/`, and `--verify` reports every missing item
