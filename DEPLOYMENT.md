@@ -40,8 +40,6 @@ Typical DFC installation locations:
 |----------|-------------|---------|
 | `DFC_HOME` | Path to DFC shared libraries | `/home/user/documentum/shared` |
 | `DFC_CONFIG` | Path to DFC config (dfc.properties) | `/home/user/documentum/config` |
-| `DOCUMENTUM` | Root Documentum directory (optional) | `/home/user/documentum` |
-| `DOCUMENTUM_SHARED` | Shared libraries directory (optional) | `/home/user/documentum/shared` |
 
 ---
 
@@ -125,19 +123,6 @@ dfc.tracing.timing.enabled=false
 The docbroker is the entry point to Documentum. The connect request chooses it: the `docbroker` and `port` of `POST /api/v1/connect` decide which environment the session connects to. The `dfc.docbroker.*` entries of `dfc.properties` are not used to route a connect, and a docbroker that is in no `dfc.properties` can be used.
 
 The bridge holds one DFC instance per docbroker host and port. Each instance gets its own `dfc.properties`, which lists only that docbroker, so one bridge can hold sessions to several environments at the same time, including two environments with the same repository name and ID. The host is used as given: `cs23` and `192.168.0.110` are two instances, even when they name the same docbroker.
-
-### dmcl.ini (Windows)
-
-On Windows, you may also need `dmcl.ini`:
-
-```ini
-[DOCBROKER_PRIMARY]
-host=docbroker.example.com
-port=1489
-
-[DMAPI_CONFIGURATION]
-cache_queries=T
-```
 
 ---
 
@@ -355,10 +340,9 @@ Expected response when DFC is available:
 ### Windows
 
 1. **Path separators:** Use semicolons (`;`) in CLASSPATH, not colons
-2. **dmcl.ini:** May be required in `%DOCUMENTUM%\config`
-3. **Environment variables:** Set via System Properties or batch file
-4. **Service deployment:** Use NSSM or Windows Service wrapper
-5. **Startup script:** `start-dfc-bridge.cmd` starts the bridge. `start-dfc-bridge.ps1` must stay in the same folder as it
+2. **Environment variables:** Set via System Properties or batch file
+3. **Service deployment:** Use NSSM or Windows Service wrapper
+4. **Startup script:** `start-dfc-bridge.cmd` starts the bridge. `start-dfc-bridge.ps1` must stay in the same folder as it
 
 ### Linux / WSL
 
@@ -396,6 +380,8 @@ WantedBy=multi-user.target
 | `DFC_HOME` | Yes (DFC mode) | `$HOME/documentum/shared` | DFC shared libraries |
 | `DFC_CONFIG` | Yes (DFC mode) | `$HOME/documentum/config` | DFC configuration |
 | `SERVER_PORT` | No | `9876` | HTTP server port |
+| `SERVER_ADDRESS` | No | `127.0.0.1` | Address the server listens on |
+| `DFC_SESSION_TIMEOUT_MINUTES` | No | `30` | Session timeout |
 
 ### Startup Script Options
 
@@ -404,6 +390,7 @@ WantedBy=multi-user.target
 | `--mode=dfc` | Run with DFC (default) |
 | `--mode=nodfc` | Run without DFC (development) |
 | `--port=PORT` | Set server port |
+| `--verify` | Verify DFC setup without starting |
 | `--help` | Show help |
 
 ### Health Endpoints
