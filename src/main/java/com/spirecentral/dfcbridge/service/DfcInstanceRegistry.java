@@ -116,6 +116,10 @@ public class DfcInstanceRegistry {
                 expandInclude(file, first.substring(INCLUDE.length()).strip(), chain, out);
             } else if (!isDroppedKey(logicalLine)) {
                 out.addAll(logicalLine);
+                // DFC ends a continuation at the end of each file, and Properties ends one at an empty line
+                if (!isCommentOrBlank(logicalLine.get(0)) && continues(logicalLine.get(logicalLine.size() - 1))) {
+                    out.add("");
+                }
             }
         }
         chain.remove(file);

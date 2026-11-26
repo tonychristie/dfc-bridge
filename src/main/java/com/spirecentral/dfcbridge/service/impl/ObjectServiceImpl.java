@@ -358,6 +358,13 @@ public class ObjectServiceImpl implements ObjectService {
                 Object newObject = DfcReflection.invoke(DFC_SESSION_IFACE, dfSession, "newObject", STRING_PARAM,
                         request.getObjectType());
 
+                boolean hasFolderPath = request.getFolderPath() != null && !request.getFolderPath().isEmpty();
+                if ((request.getObjectName() != null || hasFolderPath)
+                        && !DfcReflection.dfcClass(DFC_SYSOBJ_IFACE).isInstance(newObject)) {
+                    throw new InvalidInputException("Type " + request.getObjectType()
+                            + " is not a sysobject, so it takes no objectName or folderPath");
+                }
+
                 if (request.getObjectName() != null) {
                     DfcReflection.invoke(newObject, "setObjectName", STRING_PARAM, request.getObjectName());
                 }
@@ -370,7 +377,7 @@ public class ObjectServiceImpl implements ObjectService {
                     }
                 }
 
-                if (request.getFolderPath() != null && !request.getFolderPath().isEmpty()) {
+                if (hasFolderPath) {
                     DfcReflection.invoke(newObject, "link", STRING_PARAM, request.getFolderPath());
                 }
 

@@ -287,7 +287,6 @@ class DfcSessionServiceImplTest {
 
         sessionService.cleanupExpiredSessions();
 
-        assertNotNull(sessionService.getSessionInfo(sessionId));
         verify(sessionManager, never()).release(any());
 
         finishWork.countDown();
@@ -328,6 +327,39 @@ class DfcSessionServiceImplTest {
         assertFalse(workRan.get());
         assertThrows(SessionNotFoundException.class, () -> sessionService.getSessionInfo(sessionId));
         verify(sessionManager).release(dfSession);
+    }
+
+    @Test
+    void getSessionInfo_dfcSessionNotConnected_throwsSessionNotFoundAndRemovesTheSession() {
+        String sessionId = connect();
+        when(dfSession.isConnected()).thenReturn(false);
+
+        assertThrows(SessionNotFoundException.class, () -> sessionService.getSessionInfo(sessionId));
+        assertThrows(SessionNotFoundException.class, () -> sessionService.getSessionInfo(sessionId));
+
+        verify(sessionManager).release(dfSession);
+    }
+
+    @Test
+    void isSessionValid_dfcSessionNotConnected_returnsFalseAndRemovesTheSession() {
+        String sessionId = connect();
+        when(dfSession.isConnected()).thenReturn(false);
+
+        assertFalse(sessionService.isSessionValid(sessionId));
+
+        verify(sessionManager).release(dfSession);
+        assertThrows(SessionNotFoundException.class, () -> sessionService.getSessionInfo(sessionId));
+    }
+
+    @Test
+    void getSessionInfo_connectedSession_leavesLastActivityUnchanged() {
+        String sessionId = connect();
+        Instant earlier = Instant.now().minus(Duration.ofMinutes(5));
+        sessionService.getSessionInfo(sessionId).setLastActivity(earlier);
+
+        SessionInfo info = sessionService.getSessionInfo(sessionId);
+
+        assertEquals(earlier, info.getLastActivity());
     }
 
     @Test

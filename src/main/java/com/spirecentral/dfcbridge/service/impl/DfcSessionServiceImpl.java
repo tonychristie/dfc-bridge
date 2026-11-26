@@ -153,24 +153,15 @@ public class DfcSessionServiceImpl implements DfcSessionService {
 
     @Override
     public SessionInfo getSessionInfo(String sessionId) {
-        SessionHolder holder = sessions.get(sessionId);
-        if (holder == null) {
-            throw new SessionNotFoundException(sessionId);
-        }
-        return holder.sessionInfo;
+        return onConnectedSession(sessionId, holder -> holder.sessionInfo);
     }
 
     @Override
     public boolean isSessionValid(String sessionId) {
-        SessionHolder holder = sessions.get(sessionId);
-        if (holder == null) {
-            return false;
-        }
-        holder.lock.lock();
         try {
-            return !holder.released && withDfcLoader(holder.dfcLoader, () -> isDfcSessionConnected(holder));
-        } finally {
-            holder.lock.unlock();
+            return onConnectedSession(sessionId, holder -> true);
+        } catch (SessionNotFoundException e) {
+            return false;
         }
     }
 
@@ -184,6 +175,13 @@ public class DfcSessionServiceImpl implements DfcSessionService {
 
     @Override
     public <T> T withSession(String sessionId, Function<Object, T> work) {
+        return onConnectedSession(sessionId, holder -> {
+            holder.sessionInfo.setLastActivity(Instant.now());
+            return work.apply(holder.dfSession);
+        });
+    }
+
+    private <T> T onConnectedSession(String sessionId, Function<SessionHolder, T> action) {
         SessionHolder holder = sessions.get(sessionId);
         if (holder == null) {
             throw new SessionNotFoundException(sessionId);
@@ -203,8 +201,7 @@ public class DfcSessionServiceImpl implements DfcSessionService {
                     log.info("Session {} removed: DFC session is no longer connected", sessionId);
                     throw new SessionNotFoundException(sessionId);
                 }
-                holder.sessionInfo.setLastActivity(Instant.now());
-                return work.apply(holder.dfSession);
+                return action.apply(holder);
             });
         } finally {
             holder.lock.unlock();

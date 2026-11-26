@@ -241,6 +241,32 @@ class DfcInstanceRegistryTest {
     }
 
     @Test
+    void loaderFor_includedFileEndingInABackslash_doesNotContinueIntoTheIncludingFile() throws IOException {
+        writeConfig("common.properties", "dfc.tokenstorage.dir=C\\:/apptoken\\");
+        writeConfig("dfc.properties",
+                "#include common.properties",
+                "dfc.globalregistry.repository=EDMS");
+
+        registry.loaderFor("cs23", 1489);
+
+        Properties generated = generatedProperties();
+        assertEquals("C:/apptoken", generated.getProperty("dfc.tokenstorage.dir"));
+        assertEquals("EDMS", generated.getProperty("dfc.globalregistry.repository"));
+    }
+
+    @Test
+    void loaderFor_sourceFileEndingInABackslash_doesNotContinueIntoTheAppendedEntries() throws IOException {
+        writeConfig("dfc.properties", "dfc.tokenstorage.dir=C\\:/apptoken\\");
+
+        registry.loaderFor("cs23", 1489);
+
+        Properties generated = generatedProperties();
+        assertEquals("C:/apptoken", generated.getProperty("dfc.tokenstorage.dir"));
+        assertEquals(instancesDir.resolve("cs23_1489/data").toAbsolutePath().toString(),
+                generated.getProperty("dfc.data.dir"));
+    }
+
+    @Test
     void loaderFor_missingIncludeFile_isSkippedAndTheFileIsWritten() throws IOException {
         writeConfig("dfc.properties",
                 "#include no-such-file.properties",
