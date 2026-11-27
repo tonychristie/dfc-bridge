@@ -1,4 +1,6 @@
 server:
+  # Local connections only - override with --server.address=0.0.0.0 or SERVER_ADDRESS env var
+  address: 127.0.0.1
   # Default port - override with --server.port=XXXX or SERVER_PORT env var
   port: 9876
 
@@ -7,16 +9,18 @@ spring:
     name: dfc-bridge
   main:
     banner-mode: off
+  jackson:
+    deserialization:
+      fail-on-null-for-primitives: false
+  web:
+    resources:
+      add-mappings: false
 
 # DFC Bridge Configuration
 dfc:
   session:
     # Default session timeout in minutes
     timeout-minutes: 30
-    # Enable automatic reconnection on session loss
-    auto-reconnect: true
-    # Maximum concurrent sessions per profile
-    max-sessions-per-profile: 10
 
 # Actuator endpoints
 management:

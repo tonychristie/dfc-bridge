@@ -1,17 +1,41 @@
 package com.spirecentral.dfcbridge.service.impl;
 
+import com.documentum.fc.client.DfIdNotFoundException;
+import com.documentum.fc.client.DfQuery;
+import com.documentum.fc.client.IDfCollection;
+import com.documentum.fc.client.IDfSysObject;
+import com.documentum.fc.common.DfException;
+import com.documentum.fc.common.DfId;
+import com.documentum.fc.common.DfRuntimeException;
+import com.documentum.fc.common.DfTime;
+import com.documentum.fc.common.IDfId;
+import com.documentum.fc.common.IDfTime;
+import com.spirecentral.dfcbridge.dto.ApiRequest;
+import com.spirecentral.dfcbridge.dto.ApiResponse;
+import com.spirecentral.dfcbridge.dto.CreateObjectRequest;
+import com.spirecentral.dfcbridge.dto.UpdateObjectRequest;
+import com.spirecentral.dfcbridge.exception.DfcBridgeException;
+import com.spirecentral.dfcbridge.exception.ObjectNotFoundException;
 import com.spirecentral.dfcbridge.model.AttributeValue;
 import com.spirecentral.dfcbridge.model.ObjectInfo;
+import com.spirecentral.dfcbridge.model.TypeInfo;
 import com.spirecentral.dfcbridge.service.DfcSessionService;
+import com.spirecentral.dfcbridge.util.DfcExceptionUtils;
+import com.spirecentral.dfcbridge.util.RowCollection;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -34,6 +58,16 @@ class ObjectServiceImplTest {
         objectService = new ObjectServiceImpl(sessionService);
     }
 
+    @AfterEach
+    void tearDown() {
+        DfQuery.reset(null);
+    }
+
+    private void stubSession(Object dfSession) {
+        when(sessionService.withSession(eq("test-session"), any())).thenAnswer(
+                invocation -> invocation.<Function<Object, Object>>getArgument(1).apply(dfSession));
+    }
+
     // ========== getObject tests for different object types ==========
 
     @Test
@@ -46,7 +80,7 @@ class ObjectServiceImplTest {
         mockObject.setPermit(6);
         mockSession.setObjectToReturn(mockObject);
 
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
@@ -68,7 +102,7 @@ class ObjectServiceImplTest {
         mockObject.setPermit(7);
         mockSession.setObjectToReturn(mockObject);
 
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "0b00000180000001");
@@ -89,7 +123,7 @@ class ObjectServiceImplTest {
         mockGroup.setPermit(7);
         mockSession.setObjectToReturn(mockGroup);
 
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act - this would fail before the fix because dm_group doesn't have getObjectName
         ObjectInfo result = objectService.getObject("test-session", "1200000180000001");
@@ -110,7 +144,7 @@ class ObjectServiceImplTest {
         mockUser.setPermit(7);
         mockSession.setObjectToReturn(mockUser);
 
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act - this would fail before the fix because dm_user doesn't have getObjectName
         ObjectInfo result = objectService.getObject("test-session", "1100000180000001");
@@ -130,7 +164,7 @@ class ObjectServiceImplTest {
         mockFormat.setName("pdf");
         mockSession.setObjectToReturn(mockFormat);
 
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act - dm_format uses "name" attribute, not "object_name"
         ObjectInfo result = objectService.getObject("test-session", "2700000180000001");
@@ -152,7 +186,7 @@ class ObjectServiceImplTest {
         mockGroup.setGroupName("docu");
         mockSession.setObjectToReturn(mockGroup);
 
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "1200000180000100");
@@ -175,7 +209,7 @@ class ObjectServiceImplTest {
         mockObject.setPermit(7);
         mockSession.setObjectToReturn(mockObject);
 
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
@@ -203,7 +237,7 @@ class ObjectServiceImplTest {
         mockObject.addAttribute("object_name", 2, false, "test.pdf");
 
         mockSession.setObjectToReturn(mockObject);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
@@ -238,7 +272,7 @@ class ObjectServiceImplTest {
         mockObject.addAttribute("object_name", 2, false, "test.pdf");
 
         mockSession.setObjectToReturn(mockObject);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
@@ -270,7 +304,7 @@ class ObjectServiceImplTest {
         mockObject.addAttribute("a_is_hidden", 0, false, false);           // BOOLEAN
 
         mockSession.setObjectToReturn(mockObject);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
@@ -314,7 +348,7 @@ class ObjectServiceImplTest {
         mockObject.addAttribute("object_name", 2, false, "test.pdf");
 
         mockSession.setObjectToReturn(mockObject);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
@@ -351,7 +385,7 @@ class ObjectServiceImplTest {
         mockObject.addAttribute("r_content_size", 1, false, 98765);
 
         mockSession.setObjectToReturn(mockObject);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
@@ -407,7 +441,7 @@ class ObjectServiceImplTest {
         mockObject.addAttribute("i_cabinet_id", 3, false, "0c04719980000107"); // DM_ID = 3
 
         mockSession.setObjectToReturn(mockObject);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
@@ -443,7 +477,7 @@ class ObjectServiceImplTest {
         mockObject.addAttribute("i_folder_id", 3, true, "0c04719980000107", "0c04719980000108", "0c04719980000109"); // DM_ID = 3
 
         mockSession.setObjectToReturn(mockObject);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
@@ -480,7 +514,7 @@ class ObjectServiceImplTest {
         mockObject.addAttribute("i_folder_id", 3, true); // no values - DM_ID = 3
 
         mockSession.setObjectToReturn(mockObject);
-        when(sessionService.getDfcSession("test-session")).thenReturn(mockSession);
+        stubSession(mockSession);
 
         // Act
         ObjectInfo result = objectService.getObject("test-session", "0900000180000001");
@@ -497,6 +531,716 @@ class ObjectServiceImplTest {
         assertTrue(folderIds.isEmpty());
     }
 
+    // ========== executeApi argument conversion tests ==========
+
+    @Test
+    void executeApi_setTimeWithString_passesDfTime() {
+        MockDfSysObject mockObject = new MockDfSysObject();
+        stubSessionReturning(mockObject);
+
+        objectService.executeApi(apiRequest("setTime", "a_last_review_date", "04/11/2026 18:30:00"));
+
+        assertEquals("a_last_review_date", mockObject.getLastSetAttrName());
+        IDfTime time = assertInstanceOf(IDfTime.class, mockObject.getLastSetValue());
+        assertEquals("04/11/2026 18:30:00", time.toString());
+    }
+
+    @Test
+    void executeApi_setIdWithString_passesDfId() {
+        MockDfSysObject mockObject = new MockDfSysObject();
+        stubSessionReturning(mockObject);
+
+        objectService.executeApi(apiRequest("setId", "alias_set_id", "6604719980000101"));
+
+        assertEquals("alias_set_id", mockObject.getLastSetAttrName());
+        IDfId id = assertInstanceOf(IDfId.class, mockObject.getLastSetValue());
+        assertEquals("6604719980000101", id.getId());
+    }
+
+    @Test
+    void executeApi_setTimeWithInvalidTime_throwsApiErrorWithoutInvoking() {
+        MockDfSysObject mockObject = new MockDfSysObject();
+        stubSessionReturning(mockObject);
+        ApiRequest request = apiRequest("setTime", "a_last_review_date", DfTime.INVALID_VALUE);
+
+        DfcBridgeException e = assertThrows(DfcBridgeException.class, () -> objectService.executeApi(request));
+
+        assertEquals("API_ERROR", e.getCode());
+        assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
+        assertNull(mockObject.getLastSetAttrName());
+    }
+
+    @Test
+    void executeApi_integerForDoubleParam_callsMethod() {
+        MockApiTarget target = new MockApiTarget();
+        stubSessionReturning(target);
+
+        objectService.executeApi(apiRequest("setDouble", "weight", 2));
+
+        assertEquals(List.of("setDouble weight=2.0"), target.getCalls());
+    }
+
+    @Test
+    void executeApi_doubleForIntParam_throwsApiErrorWithoutInvoking() {
+        MockApiTarget target = new MockApiTarget();
+        stubSessionReturning(target);
+        ApiRequest request = apiRequest("setInt", "retention", 0.0);
+
+        DfcBridgeException e = assertThrows(DfcBridgeException.class, () -> objectService.executeApi(request));
+
+        assertEquals("API_ERROR", e.getCode());
+        assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
+        assertTrue(target.getCalls().isEmpty());
+    }
+
+    @Test
+    void executeApi_noMethodWithTheName_throwsApiErrorWith400() {
+        stubSessionReturning(new MockApiTarget());
+        ApiRequest request = apiRequest("noSuchMethod");
+
+        DfcBridgeException e = assertThrows(DfcBridgeException.class, () -> objectService.executeApi(request));
+
+        assertEquals("API_ERROR", e.getCode());
+        assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
+    }
+
+    @Test
+    void executeApi_stringArgWithStringAndIdOverloads_callsStringOverload() {
+        MockApiTarget target = new MockApiTarget();
+        stubSessionReturning(target);
+
+        objectService.executeApi(apiRequest("getRelatedSession", "EDMS"));
+
+        assertEquals(List.of("getRelatedSession(String)"), target.getCalls());
+    }
+
+    @Test
+    void executeApi_unknownTypeName_throwsObjectNotFound() {
+        stubSession(new MockDfSession());
+        ApiRequest request = ApiRequest.builder()
+                .sessionId("test-session")
+                .typeName("no_such_type")
+                .method("getName")
+                .build();
+
+        assertThrows(ObjectNotFoundException.class, () -> objectService.executeApi(request));
+    }
+
+    @Test
+    void executeApi_idResult_returnsIdText() {
+        stubSessionReturning(new MockApiTarget());
+
+        ApiResponse response = objectService.executeApi(apiRequest("getObjectId"));
+
+        assertEquals("0900000180000001", response.getResult());
+        assertEquals("DfId", response.getResultType());
+    }
+
+    @Test
+    void executeApi_longResult_returnsLong() {
+        stubSessionReturning(new MockApiTarget());
+
+        ApiResponse response = objectService.executeApi(apiRequest("getContentSize"));
+
+        assertEquals(3000000000L, response.getResult());
+    }
+
+    @Test
+    void executeApi_collectionResult_returnsTextAndClosesCollection() {
+        MockApiTarget target = new MockApiTarget();
+        stubSessionReturning(target);
+
+        ApiResponse response = objectService.executeApi(apiRequest("getVersions"));
+
+        assertEquals(target.getVersions().toString(), response.getResult());
+        assertTrue(target.getVersions().isClosed());
+    }
+
+    // ========== updateObject attribute write tests ==========
+
+    @Test
+    void updateObject_nullValues_writeEmptyValueForDataType() {
+        MockDfWritableObject object = writableObject();
+        Map<String, Object> attributes = new HashMap<>();
+        attributes.put("title", null);
+        attributes.put("retention_days", null);
+        attributes.put("weight", null);
+
+        objectService.updateObject("test-session", "0900000180000001", updateRequest(attributes, true));
+
+        assertTrue(object.getCalls().containsAll(List.of(
+                "setString title=", "setString retention_days=0", "setString weight=0")));
+    }
+
+    @Test
+    void updateObject_nullForRepeating_removesAllValues() {
+        MockDfWritableObject object = writableObject();
+        Map<String, Object> attributes = new HashMap<>();
+        attributes.put("keywords", null);
+
+        objectService.updateObject("test-session", "0900000180000001", updateRequest(attributes, true));
+
+        assertEquals(List.of("removeAll keywords", "save"), object.getCalls());
+    }
+
+    @Test
+    void updateObject_nullElementInList_writesEmptyValueAtIndex() {
+        MockDfWritableObject object = writableObject();
+        Map<String, Object> attributes = Map.of("keywords", Arrays.asList("first", null));
+
+        objectService.updateObject("test-session", "0900000180000001", updateRequest(attributes, true));
+
+        assertEquals(List.of("removeAll keywords", "setRepeatingString keywords[0]=first",
+                "setRepeatingString keywords[1]=", "save"), object.getCalls());
+    }
+
+    @Test
+    void updateObject_nonStringValues_writtenAsText() {
+        MockDfWritableObject object = writableObject();
+        Map<String, Object> attributes = Map.of(
+                "subject", true,
+                "retention_days", 5,
+                "weight", 1.5,
+                "content_bytes", 3000000000L);
+
+        objectService.updateObject("test-session", "0900000180000001", updateRequest(attributes, true));
+
+        assertTrue(object.getCalls().containsAll(List.of("setString subject=true",
+                "setString retention_days=5", "setString weight=1.5", "setString content_bytes=3000000000")));
+    }
+
+    @Test
+    void updateObject_objectValue_throwsUpdateError() {
+        writableObject();
+        UpdateObjectRequest request = updateRequest(Map.of("subject", Map.of("a", 1)), true);
+
+        DfcBridgeException e = assertThrows(DfcBridgeException.class,
+                () -> objectService.updateObject("test-session", "0900000180000001", request));
+
+        assertEquals("UPDATE_ERROR", e.getCode());
+        assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
+    }
+
+    @Test
+    void updateObject_listForSingleValueAttribute_throwsUpdateError() {
+        writableObject();
+        UpdateObjectRequest request = updateRequest(Map.of("subject", List.of("a", "b")), true);
+
+        DfcBridgeException e = assertThrows(DfcBridgeException.class,
+                () -> objectService.updateObject("test-session", "0900000180000001", request));
+
+        assertEquals("UPDATE_ERROR", e.getCode());
+        assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
+    }
+
+    @Test
+    void updateObject_saveFalse_revertsAndReturnsSetValues() {
+        MockDfWritableObject object = writableObject();
+
+        ObjectInfo result = objectService.updateObject("test-session", "0900000180000001",
+                updateRequest(Map.of("title", "not saved"), false));
+
+        assertEquals(List.of("setString title=not saved", "revert"), object.getCalls());
+        assertEquals("not saved", result.getAttributes().get("title").getValue());
+    }
+
+    @Test
+    void updateObject_setFails_revertsAndThrowsUpdateError() {
+        MockDfWritableObject object = writableObject();
+        object.failSetOn("subject");
+        UpdateObjectRequest request = updateRequest(Map.of("subject", "x"), true);
+
+        DfcBridgeException e = assertThrows(DfcBridgeException.class,
+                () -> objectService.updateObject("test-session", "0900000180000001", request));
+
+        assertEquals("UPDATE_ERROR", e.getCode());
+        assertEquals(List.of("revert"), object.getCalls());
+    }
+
+    @Test
+    void updateObject_setAndRevertFail_throwsOriginalError() {
+        MockDfWritableObject object = writableObject();
+        DfException setFailure = object.failSetOn("subject");
+        object.failRevert();
+        UpdateObjectRequest request = updateRequest(Map.of("subject", "x"), true);
+
+        DfcBridgeException e = assertThrows(DfcBridgeException.class,
+                () -> objectService.updateObject("test-session", "0900000180000001", request));
+
+        assertEquals("UPDATE_ERROR", e.getCode());
+        assertSame(setFailure, DfcExceptionUtils.unwrap((Exception) e.getCause()));
+    }
+
+    private MockDfWritableObject writableObject() {
+        MockDfWritableObject object = new MockDfWritableObject();
+        object.setTypeName("dm_document");
+        object.setPermit(7);
+        object.define("title", 2, false, "old title");
+        object.define("subject", 2, false, "old subject");
+        object.define("retention_days", 1, false, 10);
+        object.define("content_bytes", 1, false, 0);
+        object.define("weight", 5, false, 2.0);
+        object.define("keywords", 2, true, "one", "two");
+        stubSessionReturning(object);
+        return object;
+    }
+
+    private UpdateObjectRequest updateRequest(Map<String, Object> attributes, boolean save) {
+        return UpdateObjectRequest.builder()
+                .sessionId("test-session")
+                .attributes(attributes)
+                .save(save)
+                .build();
+    }
+
+    // ========== folder listing tests ==========
+
+    private static final String FOLDER_QUERY = "SELECT r_object_id, object_name, r_object_type, a_content_type "
+            + "FROM dm_sysobject WHERE FOLDER(ID('0b00000180000001')) ORDER BY object_name";
+
+    @Test
+    void listFolderContentsById_runsOneQueryOnFolderId() {
+        stubSessionReturning(folder());
+        DfQuery.reset(dql -> folderRows());
+
+        List<ObjectInfo> contents = objectService.listFolderContentsById("test-session", "0b00000180000001");
+
+        assertEquals(List.of(FOLDER_QUERY), DfQuery.executed);
+        assertFolderRows(contents);
+    }
+
+    @Test
+    void listFolderContentsById_objectIsNotFolder_throwsObjectNotFound() {
+        stubSessionReturning(new Object());
+
+        assertThrows(ObjectNotFoundException.class,
+                () -> objectService.listFolderContentsById("test-session", "0900000180000003"));
+        assertTrue(DfQuery.executed.isEmpty());
+    }
+
+    @Test
+    void listFolderContents_runsOneQueryOnFolderId() {
+        MockDfSession session = new MockDfSession();
+        session.addFolder("/Temp/Reports", folder());
+        stubSession(session);
+        DfQuery.reset(dql -> folderRows());
+
+        List<ObjectInfo> contents = objectService.listFolderContents("test-session", "/Temp/Reports");
+
+        assertEquals(List.of(FOLDER_QUERY), DfQuery.executed);
+        assertFolderRows(contents);
+    }
+
+    @Test
+    void listFolderContents_noFolderAtPath_throwsObjectNotFound() {
+        stubSession(new MockDfSession());
+
+        assertThrows(ObjectNotFoundException.class,
+                () -> objectService.listFolderContents("test-session", "/No/Such/Folder"));
+    }
+
+    private MockDfFolder folder() {
+        return new MockDfFolder("0b00000180000001");
+    }
+
+    private RowCollection folderRows() {
+        return new RowCollection(
+                Map.of("r_object_id", "0b00000180000002", "object_name", "Archive",
+                        "r_object_type", "dm_folder", "a_content_type", ""),
+                Map.of("r_object_id", "0900000180000003", "object_name", "Report",
+                        "r_object_type", "dm_document", "a_content_type", "pdf"));
+    }
+
+    private void assertFolderRows(List<ObjectInfo> contents) {
+        assertEquals(2, contents.size());
+        ObjectInfo document = contents.get(1);
+        assertEquals("0900000180000003", document.getObjectId());
+        assertEquals("dm_document", document.getType());
+        assertEquals("Report", document.getName());
+        assertEquals(Map.of("a_content_type", AttributeValue.single("string", "pdf")), document.getAttributes());
+        assertNull(document.getPermissionLevel());
+        assertEquals("Archive", contents.get(0).getName());
+    }
+
+    // ========== type list tests ==========
+
+    @Test
+    void listTypes_mapsNameAndSuperName() {
+        stubSession(new MockDfSession());
+        DfQuery.reset(dql -> new RowCollection(
+                Map.of("name", "dm_document", "super_name", "dm_sysobject"),
+                Map.of("name", "dmi_queue_item", "super_name", ""),
+                Map.of("name", "my_contract", "super_name", "dm_document")));
+
+        List<TypeInfo> types = objectService.listTypes("test-session", null);
+
+        assertEquals(List.of("SELECT name, super_name FROM dm_type ORDER BY name"), DfQuery.executed);
+        assertEquals("dm_document", types.get(0).getName());
+        assertEquals("dm_sysobject", types.get(0).getSuperType());
+        assertTrue(types.get(0).isSystemType());
+        assertEquals("", types.get(1).getSuperType());
+        assertTrue(types.get(1).isSystemType());
+        assertFalse(types.get(2).isSystemType());
+        assertNull(types.get(2).getAttributes());
+    }
+
+    @Test
+    void listTypes_dmPattern_escapesUnderscore() {
+        stubSession(new MockDfSession());
+        DfQuery.reset(dql -> new RowCollection());
+
+        objectService.listTypes("test-session", "dm_*");
+
+        assertEquals(List.of("SELECT name, super_name FROM dm_type WHERE name LIKE 'dm\\_%' ESCAPE '\\' ORDER BY name"),
+                DfQuery.executed);
+    }
+
+    // ========== createObject tests ==========
+
+    @Test
+    void createObject_setsNameAttributesAndFolderThenSaves() {
+        MockDfDocument document = document();
+        MockDfSession session = sessionCreating(document);
+        CreateObjectRequest request = CreateObjectRequest.builder()
+                .sessionId("test-session")
+                .objectType("dm_document")
+                .objectName("Report")
+                .attributes(Map.of("title", "Annual"))
+                .folderPath("/Temp")
+                .build();
+
+        ObjectInfo result = objectService.createObject("test-session", request);
+
+        assertEquals("dm_document", session.getNewObjectType());
+        assertEquals(List.of("setObjectName Report", "setString title=Annual", "link /Temp", "save"),
+                document.getCalls());
+        assertEquals(MockDfDocument.OBJECT_ID, result.getObjectId());
+        assertEquals("Report", result.getName());
+    }
+
+    @Test
+    void createObject_saveFails_throwsCreateErrorWithStatusOfCause() {
+        MockDfDocument document = document();
+        document.failOn("save", "DM_SYSOBJECT_E_NO_WRITE_ACCESS");
+        sessionCreating(document);
+        CreateObjectRequest request = createRequest();
+
+        DfcBridgeException e = assertThrows(DfcBridgeException.class,
+                () -> objectService.createObject("test-session", request));
+
+        assertEquals("CREATE_ERROR", e.getCode());
+        assertEquals(HttpStatus.FORBIDDEN, e.getStatus());
+    }
+
+    @Test
+    void createObject_dfcNotFoundFromNewObject_is404() {
+        MockDfSession session = sessionCreating(null);
+        session.setNewObjectException(new DfIdNotFoundException("DM_API_E_EXIST"));
+        CreateObjectRequest request = createRequest();
+
+        DfcBridgeException e = assertThrows(DfcBridgeException.class,
+                () -> objectService.createObject("test-session", request));
+
+        assertEquals("CREATE_ERROR", e.getCode());
+        assertEquals(HttpStatus.NOT_FOUND, e.getStatus());
+    }
+
+    @Test
+    void createObject_nonSysObjectWithName_is400AndSetsNothing() {
+        MockDfWritableObject relation = new MockDfWritableObject();
+        sessionCreating(relation);
+        CreateObjectRequest request = CreateObjectRequest.builder()
+                .sessionId("test-session")
+                .objectType("dm_relation")
+                .objectName("p1")
+                .build();
+
+        DfcBridgeException e = assertThrows(DfcBridgeException.class,
+                () -> objectService.createObject("test-session", request));
+
+        assertEquals("CREATE_ERROR", e.getCode());
+        assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
+        assertTrue(e.getMessage().contains("dm_relation"));
+        assertEquals(List.of(), relation.getCalls());
+    }
+
+    @Test
+    void createObject_nonSysObjectWithFolderPath_is400AndSetsNothing() {
+        MockDfWritableObject relation = new MockDfWritableObject();
+        sessionCreating(relation);
+        CreateObjectRequest request = CreateObjectRequest.builder()
+                .sessionId("test-session")
+                .objectType("dm_relation")
+                .attributes(Map.of("relation_name", "r1"))
+                .folderPath("/Temp")
+                .build();
+
+        DfcBridgeException e = assertThrows(DfcBridgeException.class,
+                () -> objectService.createObject("test-session", request));
+
+        assertEquals("CREATE_ERROR", e.getCode());
+        assertEquals(HttpStatus.BAD_REQUEST, e.getStatus());
+        assertTrue(e.getMessage().contains("dm_relation"));
+        assertEquals(List.of(), relation.getCalls());
+    }
+
+    private MockDfSession sessionCreating(Object newObject) {
+        MockDfSession session = new MockDfSession();
+        session.setNewObject(newObject);
+        stubSession(session);
+        return session;
+    }
+
+    private CreateObjectRequest createRequest() {
+        return CreateObjectRequest.builder()
+                .sessionId("test-session")
+                .objectType("dm_document")
+                .build();
+    }
+
+    // ========== version control tests ==========
+
+    @Test
+    void checkout_callsCheckoutAndReturnsObjectInfo() {
+        MockDfDocument document = document();
+        stubSessionReturning(document);
+
+        ObjectInfo result = objectService.checkout("test-session", MockDfDocument.OBJECT_ID);
+
+        assertEquals(List.of("checkout"), document.getCalls());
+        assertEquals(MockDfDocument.OBJECT_ID, result.getObjectId());
+    }
+
+    @Test
+    void cancelCheckout_callsCancelCheckout() {
+        MockDfDocument document = document();
+        stubSessionReturning(document);
+
+        objectService.cancelCheckout("test-session", MockDfDocument.OBJECT_ID);
+
+        assertEquals(List.of("cancelCheckout"), document.getCalls());
+    }
+
+    @Test
+    void checkin_passesKeepLockFalseAndLabelAndReturnsTheNewVersion() {
+        MockDfDocument document = document();
+        MockDfSession session = new MockDfSession();
+        session.setObjectToReturn(document);
+        stubSession(session);
+
+        ObjectInfo result = objectService.checkin("test-session", MockDfDocument.OBJECT_ID, "1.1");
+
+        assertEquals(List.of("checkin false 1.1"), document.getCalls());
+        assertEquals(List.of(MockDfDocument.OBJECT_ID, MockDfDocument.NEW_VERSION_ID), session.getRequestedIds());
+        assertEquals(MockDfDocument.NEW_VERSION_ID, result.getObjectId());
+    }
+
+    @Test
+    void checkout_idDoesNotExist_throwsObjectNotFound() {
+        stubSessionThrowingIdNotFound();
+
+        DfcBridgeException e = assertThrows(DfcBridgeException.class,
+                () -> objectService.checkout("test-session", MockDfDocument.OBJECT_ID));
+
+        assertEquals("OBJECT_NOT_FOUND", e.getCode());
+    }
+
+    @Test
+    void cancelCheckout_idDoesNotExist_throwsObjectNotFound() {
+        stubSessionThrowingIdNotFound();
+
+        DfcBridgeException e = assertThrows(DfcBridgeException.class,
+                () -> objectService.cancelCheckout("test-session", MockDfDocument.OBJECT_ID));
+
+        assertEquals("OBJECT_NOT_FOUND", e.getCode());
+    }
+
+    @Test
+    void checkin_idDoesNotExist_throwsObjectNotFound() {
+        stubSessionThrowingIdNotFound();
+
+        DfcBridgeException e = assertThrows(DfcBridgeException.class,
+                () -> objectService.checkin("test-session", MockDfDocument.OBJECT_ID, "CURRENT"));
+
+        assertEquals("OBJECT_NOT_FOUND", e.getCode());
+    }
+
+    @Test
+    void checkout_dfcFailure_throwsCheckoutErrorWithStatusOfCause() {
+        MockDfDocument document = document();
+        document.failOn("checkout", "DM_SYSOBJECT_E_CANT_LOCK");
+        stubSessionReturning(document);
+
+        DfcBridgeException e = assertThrows(DfcBridgeException.class,
+                () -> objectService.checkout("test-session", MockDfDocument.OBJECT_ID));
+
+        assertEquals("CHECKOUT_ERROR", e.getCode());
+        assertEquals(HttpStatus.BAD_GATEWAY, e.getStatus());
+    }
+
+    @Test
+    void cancelCheckout_dfcFailure_throwsCancelCheckoutErrorWithStatusOfCause() {
+        MockDfDocument document = document();
+        document.failOn("cancelCheckout", "DM_SYSOBJECT_E_NO_VERSION_ACCESS");
+        stubSessionReturning(document);
+
+        DfcBridgeException e = assertThrows(DfcBridgeException.class,
+                () -> objectService.cancelCheckout("test-session", MockDfDocument.OBJECT_ID));
+
+        assertEquals("CANCEL_CHECKOUT_ERROR", e.getCode());
+        assertEquals(HttpStatus.FORBIDDEN, e.getStatus());
+    }
+
+    @Test
+    void checkin_dfcFailure_throwsCheckinErrorWithStatusOfCause() {
+        MockDfDocument document = document();
+        document.failOn("checkin", "DM_SYSOBJECT_E_NO_VERSION_ACCESS");
+        stubSessionReturning(document);
+
+        DfcBridgeException e = assertThrows(DfcBridgeException.class,
+                () -> objectService.checkin("test-session", MockDfDocument.OBJECT_ID, "CURRENT"));
+
+        assertEquals("CHECKIN_ERROR", e.getCode());
+        assertEquals(HttpStatus.FORBIDDEN, e.getStatus());
+    }
+
+    private MockDfDocument document() {
+        MockDfDocument document = new MockDfDocument();
+        document.setTypeName("dm_document");
+        document.setPermit(7);
+        document.define("object_name", 2, false);
+        document.define("title", 2, false, "");
+        return document;
+    }
+
+    // ========== type info tests ==========
+
+    @Test
+    void getTypeInfo_returnsAttributesAndMarksThoseOfTheSuperTypeAsInherited() {
+        MockTypeDefinition superType = new MockTypeDefinition("dm_document", "dm_sysobject", null,
+                new MockTypeAttr("object_name", 2, 255, false),
+                new MockTypeAttr("keywords", 2, 48, true));
+        MockTypeDefinition type = new MockTypeDefinition("my_contract", "dm_document", superType,
+                new MockTypeAttr("object_name", 2, 255, false),
+                new MockTypeAttr("keywords", 2, 48, true),
+                new MockTypeAttr("contract_no", 1, 0, false));
+        MockDfSession session = new MockDfSession();
+        session.addType("my_contract", type);
+        stubSession(session);
+
+        TypeInfo info = objectService.getTypeInfo("test-session", "my_contract");
+
+        assertEquals("my_contract", info.getName());
+        assertEquals("dm_document", info.getSuperType());
+        assertFalse(info.isSystemType());
+        List<TypeInfo.AttributeInfo> attributes = info.getAttributes();
+        assertEquals(List.of("object_name", "keywords", "contract_no"),
+                attributes.stream().map(TypeInfo.AttributeInfo::getName).toList());
+        assertEquals(List.of(true, true, false),
+                attributes.stream().map(TypeInfo.AttributeInfo::isInherited).toList());
+        TypeInfo.AttributeInfo keywords = attributes.get(1);
+        assertEquals("STRING", keywords.getDataType());
+        assertEquals(48, keywords.getLength());
+        assertTrue(keywords.isRepeating());
+        assertEquals("INTEGER", attributes.get(2).getDataType());
+    }
+
+    @Test
+    void getTypeInfo_unknownType_throwsObjectNotFound() {
+        stubSession(new MockDfSession());
+
+        DfcBridgeException e = assertThrows(DfcBridgeException.class,
+                () -> objectService.getTypeInfo("test-session", "no_such_type"));
+
+        assertEquals("OBJECT_NOT_FOUND", e.getCode());
+    }
+
+    @Test
+    void getTypeInfo_dfcFailure_throwsTypeError() {
+        MockTypeDefinition type = new MockTypeDefinition("my_contract", "dm_document", null);
+        type.fail();
+        MockDfSession session = new MockDfSession();
+        session.addType("my_contract", type);
+        stubSession(session);
+
+        DfcBridgeException e = assertThrows(DfcBridgeException.class,
+                () -> objectService.getTypeInfo("test-session", "my_contract"));
+
+        assertEquals("TYPE_ERROR", e.getCode());
+    }
+
+    // ========== cabinet tests ==========
+
+    @Test
+    void getCabinets_mapsIdNameAndTypeOfEachRow() {
+        stubSession(new MockDfSession());
+        DfQuery.reset(dql -> new RowCollection(
+                Map.of("r_object_id", "0c00000180000001", "object_name", "System", "r_object_type", "dm_cabinet"),
+                Map.of("r_object_id", "0c00000180000002", "object_name", "Temp", "r_object_type", "my_cabinet")));
+
+        List<ObjectInfo> cabinets = objectService.getCabinets("test-session");
+
+        assertEquals(List.of("SELECT r_object_id, object_name, r_object_type FROM dm_cabinet ORDER BY object_name"),
+                DfQuery.executed);
+        assertEquals(2, cabinets.size());
+        assertEquals("0c00000180000002", cabinets.get(1).getObjectId());
+        assertEquals("Temp", cabinets.get(1).getName());
+        assertEquals("my_cabinet", cabinets.get(1).getType());
+        assertEquals("System", cabinets.get(0).getName());
+    }
+
+    @Test
+    void getCabinets_dfcFailure_throwsCabinetError() {
+        stubSession(new MockDfSession());
+        DfQuery.reset(dql -> {
+            throw new DfRuntimeException("Using session handle that has already been released");
+        });
+
+        DfcBridgeException e = assertThrows(DfcBridgeException.class,
+                () -> objectService.getCabinets("test-session"));
+
+        assertEquals("CABINET_ERROR", e.getCode());
+    }
+
+    // ========== missing object tests ==========
+
+    @Test
+    void getObject_idDoesNotExist_throwsObjectNotFound() {
+        stubSessionThrowingIdNotFound();
+
+        assertThrows(ObjectNotFoundException.class,
+                () -> objectService.getObject("test-session", "0900000000000001"));
+    }
+
+    @Test
+    void deleteObject_idDoesNotExist_throwsObjectNotFound() {
+        stubSessionThrowingIdNotFound();
+
+        assertThrows(ObjectNotFoundException.class,
+                () -> objectService.deleteObject("test-session", "0900000000000001", false));
+    }
+
+    private void stubSessionThrowingIdNotFound() {
+        MockDfSession mockSession = new MockDfSession();
+        mockSession.setGetObjectException(new DfIdNotFoundException("DM_API_E_EXIST"));
+        stubSession(mockSession);
+    }
+
+    private void stubSessionReturning(Object object) {
+        MockDfSession mockSession = new MockDfSession();
+        mockSession.setObjectToReturn(object);
+        stubSession(mockSession);
+    }
+
+    private ApiRequest apiRequest(String method, Object... args) {
+        return ApiRequest.builder()
+                .sessionId("test-session")
+                .objectId("0900000180000001")
+                .method(method)
+                .args(List.of(args))
+                .build();
+    }
+
     // ========== Mock DFC Objects ==========
 
     /**
@@ -504,13 +1248,91 @@ class ObjectServiceImplTest {
      */
     public static class MockDfSession implements com.documentum.fc.client.IDfSession {
         private Object objectToReturn;
+        private DfException getObjectException;
+        private Object newObject;
+        private DfException newObjectException;
+        private String newObjectType;
+        private final Map<String, Object> folders = new HashMap<>();
+        private final Map<String, Object> types = new HashMap<>();
+        private final List<String> requestedIds = new ArrayList<>();
 
         public void setObjectToReturn(Object obj) {
             this.objectToReturn = obj;
         }
 
-        public Object getObject(com.documentum.fc.common.IDfId id) {
+        public void addFolder(String path, Object folder) {
+            folders.put(path, folder);
+        }
+
+        public void addType(String name, Object type) {
+            types.put(name, type);
+        }
+
+        public void setGetObjectException(DfException e) {
+            this.getObjectException = e;
+        }
+
+        public void setNewObject(Object newObject) {
+            this.newObject = newObject;
+        }
+
+        public void setNewObjectException(DfException e) {
+            this.newObjectException = e;
+        }
+
+        public String getNewObjectType() {
+            return newObjectType;
+        }
+
+        public List<String> getRequestedIds() {
+            return requestedIds;
+        }
+
+        public Object getObject(com.documentum.fc.common.IDfId id) throws DfException {
+            requestedIds.add(id.getId());
+            if (getObjectException != null) {
+                throw getObjectException;
+            }
             return objectToReturn;
+        }
+
+        @Override
+        public Object getType(String typeName) {
+            return types.get(typeName);
+        }
+
+        @Override
+        public Object getFolderByPath(String folderPath) {
+            return folders.get(folderPath);
+        }
+
+        @Override
+        public Object newObject(String typeName) throws DfException {
+            newObjectType = typeName;
+            if (newObjectException != null) {
+                throw newObjectException;
+            }
+            return newObject;
+        }
+
+        @Override
+        public boolean isConnected() {
+            return true;
+        }
+
+        @Override
+        public String getServerVersion() {
+            return null;
+        }
+
+        @Override
+        public com.documentum.fc.client.IDfTypedObject getDocbaseConfig() {
+            return null;
+        }
+
+        @Override
+        public com.documentum.fc.client.IDfTypedObject getServerConfig() {
+            return null;
         }
 
         @Override
@@ -537,6 +1359,8 @@ class ObjectServiceImplTest {
         private String objectName;
         private int permit;
         private int attrCount = 0;
+        private String lastSetAttrName;
+        private Object lastSetValue;
 
         public void setTypeName(String typeName) {
             this.typeName = typeName;
@@ -544,6 +1368,24 @@ class ObjectServiceImplTest {
 
         public void setObjectName(String objectName) {
             this.objectName = objectName;
+        }
+
+        public void setTime(String attrName, IDfTime value) {
+            lastSetAttrName = attrName;
+            lastSetValue = value;
+        }
+
+        public void setId(String attrName, IDfId value) {
+            lastSetAttrName = attrName;
+            lastSetValue = value;
+        }
+
+        public String getLastSetAttrName() {
+            return lastSetAttrName;
+        }
+
+        public Object getLastSetValue() {
+            return lastSetValue;
         }
 
         public void setPermit(int permit) {
@@ -943,6 +1785,310 @@ class ObjectServiceImplTest {
                 }
             }
             return false;
+        }
+    }
+
+    /**
+     * Mock object that records each write, with a type definition for the attribute data types.
+     */
+    public static class MockDfWritableObject extends MockDfObjectWithAttributes {
+        private final List<MockAttribute> typeAttrs = new ArrayList<>();
+        protected final Map<String, String> setValues = new HashMap<>();
+        private final List<String> calls = new ArrayList<>();
+        private String failingAttr;
+        private DfException setFailure;
+        private boolean revertFails;
+
+        public void define(String name, int dataType, boolean repeating, Object... values) {
+            addAttribute(name, dataType, repeating, values);
+            typeAttrs.add(new MockAttribute(name, dataType, repeating));
+        }
+
+        public DfException failSetOn(String attrName) {
+            failingAttr = attrName;
+            setFailure = new DfException("DM_API_E_BADATTRVALUE");
+            return setFailure;
+        }
+
+        public void failRevert() {
+            revertFails = true;
+        }
+
+        public List<String> getCalls() {
+            return calls;
+        }
+
+        public MockTypeSession getSession() {
+            return new MockTypeSession(new MockType(typeAttrs));
+        }
+
+        public boolean isAttrRepeating(String attrName) {
+            return typeAttrs.stream().anyMatch(a -> a.getName().equals(attrName) && a.isRepeating());
+        }
+
+        public void setString(String attrName, String value) throws DfException {
+            if (attrName.equals(failingAttr)) {
+                throw setFailure;
+            }
+            calls.add("setString " + attrName + "=" + value);
+            setValues.put(attrName, value);
+        }
+
+        public void setRepeatingString(String attrName, int index, String value) {
+            calls.add("setRepeatingString " + attrName + "[" + index + "]=" + value);
+        }
+
+        public void removeAll(String attrName) {
+            calls.add("removeAll " + attrName);
+        }
+
+        public void save() throws DfException {
+            calls.add("save");
+        }
+
+        public void revert() throws DfException {
+            calls.add("revert");
+            if (revertFails) {
+                throw new DfException("DM_API_E_REVERT");
+            }
+        }
+
+        @Override
+        public String getString(String attrName) {
+            return setValues.containsKey(attrName) ? setValues.get(attrName) : super.getString(attrName);
+        }
+    }
+
+    /**
+     * Mock document for create and version control, recording each DFC call.
+     */
+    public static class MockDfDocument extends MockDfWritableObject implements IDfSysObject {
+        static final String OBJECT_ID = "0900000180000001";
+        static final String NEW_VERSION_ID = "0900000180000002";
+
+        private final Map<String, DfException> failures = new HashMap<>();
+
+        public void failOn(String method, String messageId) {
+            failures.put(method, new DfException(messageId));
+        }
+
+        private void record(String method, String call) throws DfException {
+            if (failures.containsKey(method)) {
+                throw failures.get(method);
+            }
+            getCalls().add(call);
+        }
+
+        public void setObjectName(String name) throws DfException {
+            record("setObjectName", "setObjectName " + name);
+            setValues.put("object_name", name);
+        }
+
+        public void link(String folderPath) throws DfException {
+            record("link", "link " + folderPath);
+        }
+
+        @Override
+        public void save() throws DfException {
+            record("save", "save");
+        }
+
+        public IDfId getObjectId() {
+            return new DfId(OBJECT_ID);
+        }
+
+        public void checkout() throws DfException {
+            record("checkout", "checkout");
+        }
+
+        public void cancelCheckout() throws DfException {
+            record("cancelCheckout", "cancelCheckout");
+        }
+
+        public IDfId checkin(boolean keepLock, String versionLabels) throws DfException {
+            record("checkin", "checkin " + keepLock + " " + versionLabels);
+            return new DfId(NEW_VERSION_ID);
+        }
+    }
+
+    /**
+     * Mock type definition for type info.
+     */
+    public static class MockTypeDefinition {
+        private final String name;
+        private final String superName;
+        private final MockTypeDefinition superType;
+        private final List<MockTypeAttr> attrs;
+        private boolean failing;
+
+        public MockTypeDefinition(String name, String superName, MockTypeDefinition superType, MockTypeAttr... attrs) {
+            this.name = name;
+            this.superName = superName;
+            this.superType = superType;
+            this.attrs = List.of(attrs);
+        }
+
+        public void fail() {
+            failing = true;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public String getSuperName() {
+            return superName;
+        }
+
+        public MockTypeDefinition getSuperType() {
+            return superType;
+        }
+
+        public int getTypeAttrCount() throws DfException {
+            if (failing) {
+                throw new DfException("DM_TYPE_MGR_E_BAD_TYPE");
+            }
+            return attrs.size();
+        }
+
+        public MockTypeAttr getTypeAttr(int index) {
+            return attrs.get(index);
+        }
+    }
+
+    public static class MockTypeAttr {
+        private final String name;
+        private final int dataType;
+        private final int length;
+        private final boolean repeating;
+
+        public MockTypeAttr(String name, int dataType, int length, boolean repeating) {
+            this.name = name;
+            this.dataType = dataType;
+            this.length = length;
+            this.repeating = repeating;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public int getDataType() {
+            return dataType;
+        }
+
+        public int getLength() {
+            return length;
+        }
+
+        public boolean isRepeating() {
+            return repeating;
+        }
+    }
+
+    public static class MockTypeSession {
+        private final MockType type;
+
+        public MockTypeSession(MockType type) {
+            this.type = type;
+        }
+
+        public MockType getType(String typeName) {
+            return type;
+        }
+    }
+
+    public static class MockType {
+        private final List<MockAttribute> attrs;
+
+        public MockType(List<MockAttribute> attrs) {
+            this.attrs = attrs;
+        }
+
+        public int getTypeAttrCount() {
+            return attrs.size();
+        }
+
+        public MockAttribute getTypeAttr(int index) {
+            return attrs.get(index);
+        }
+    }
+
+    public static class MockDfFolder implements com.documentum.fc.client.IDfFolder {
+        private final String objectId;
+
+        public MockDfFolder(String objectId) {
+            this.objectId = objectId;
+        }
+
+        @Override
+        public String getString(String attrName) {
+            return "r_object_id".equals(attrName) ? objectId : null;
+        }
+    }
+
+    /**
+     * Mock target for API calls, recording which method ran.
+     */
+    public static class MockApiTarget {
+        private final List<String> calls = new ArrayList<>();
+        private final MockCollection versions = new MockCollection();
+
+        public List<String> getCalls() {
+            return calls;
+        }
+
+        public void setDouble(String attrName, double value) {
+            calls.add("setDouble " + attrName + "=" + value);
+        }
+
+        public void setInt(String attrName, int value) {
+            calls.add("setInt " + attrName + "=" + value);
+        }
+
+        public String getRelatedSession(String repository) {
+            calls.add("getRelatedSession(String)");
+            return repository;
+        }
+
+        public String getRelatedSession(IDfId id) {
+            calls.add("getRelatedSession(IDfId)");
+            return id.getId();
+        }
+
+        public IDfId getObjectId() {
+            return new DfId("0900000180000001");
+        }
+
+        public long getContentSize() {
+            return 3000000000L;
+        }
+
+        public MockCollection getVersions() {
+            return versions;
+        }
+    }
+
+    public static class MockCollection implements IDfCollection {
+        private boolean closed;
+
+        @Override
+        public boolean next() {
+            return false;
+        }
+
+        @Override
+        public void close() {
+            closed = true;
+        }
+
+        public boolean isClosed() {
+            return closed;
+        }
+
+        @Override
+        public String toString() {
+            return "versions collection";
         }
     }
 

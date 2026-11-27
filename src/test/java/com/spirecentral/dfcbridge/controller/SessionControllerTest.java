@@ -1,6 +1,5 @@
 package com.spirecentral.dfcbridge.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.spirecentral.dfcbridge.dto.ConnectRequest;
 import com.spirecentral.dfcbridge.dto.ConnectResponse;
 import com.spirecentral.dfcbridge.dto.DisconnectRequest;
@@ -9,14 +8,17 @@ import com.spirecentral.dfcbridge.model.RepositoryInfo;
 import com.spirecentral.dfcbridge.model.SessionInfo;
 import com.spirecentral.dfcbridge.service.DfcSessionService;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -32,7 +34,7 @@ class SessionControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @MockBean
+    @MockitoBean
     private DfcSessionService sessionService;
 
     @Test
@@ -66,6 +68,22 @@ class SessionControllerTest {
     }
 
     @Test
+    void testConnect_OmittedPortUsesDefault() throws Exception {
+        when(sessionService.connect(any(ConnectRequest.class)))
+                .thenReturn(ConnectResponse.builder().sessionId("test-session-123").build());
+
+        mockMvc.perform(post("/api/v1/connect")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"docbroker\":\"docbroker.example.com\",\"repository\":\"TestRepo\","
+                                + "\"username\":\"test01\",\"password\":\"password123\"}"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<ConnectRequest> captor = ArgumentCaptor.forClass(ConnectRequest.class);
+        verify(sessionService).connect(captor.capture());
+        assertEquals(1489, captor.getValue().getPort());
+    }
+
+    @Test
     void testConnect_ValidationError() throws Exception {
         ConnectRequest request = ConnectRequest.builder()
                 .port(1489)
@@ -76,6 +94,21 @@ class SessionControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void testConnect_ValidationError_AcceptXml_ReturnsJson() throws Exception {
+        ConnectRequest request = ConnectRequest.builder()
+                .port(1489)
+                .build();
+
+        mockMvc.perform(post("/api/v1/connect")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_XML)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }
 
     @Test

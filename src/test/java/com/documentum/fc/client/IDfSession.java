@@ -1,5 +1,6 @@
 package com.documentum.fc.client;
 
+import com.documentum.fc.common.DfException;
 import com.documentum.fc.common.IDfId;
 
 /**
@@ -16,9 +17,48 @@ public interface IDfSession {
      * Get an object by its ID.
      *
      * @param objectId the object ID
-     * @return the persistent object, or null if not found
+     * @return the persistent object
+     * @throws DfException DfIdNotFoundException when no object has the id
      */
-    Object getObject(IDfId objectId);
+    Object getObject(IDfId objectId) throws DfException;
+
+    /**
+     * Get a type definition by name.
+     *
+     * @param typeName the type name
+     * @return the type, or null when no type has the name
+     */
+    Object getType(String typeName);
+
+    /**
+     * Get a folder by its path.
+     *
+     * @param folderPath the folder path
+     * @return the folder, or null when no folder has the path
+     */
+    Object getFolderByPath(String folderPath);
+
+    /**
+     * Create a new object of a type.
+     *
+     * @param typeName the type name
+     * @return the new, unsaved object
+     * @throws DfException when DFC cannot create the object, for example for an unknown type
+     */
+    Object newObject(String typeName) throws DfException;
+
+    /**
+     * Check whether the session is connected.
+     *
+     * @return false once the session has been released
+     */
+    boolean isConnected();
+
+    String getServerVersion() throws DfException;
+
+    IDfTypedObject getDocbaseConfig() throws DfException;
+
+    IDfTypedObject getServerConfig() throws DfException;
 
     /**
      * Execute a dmAPI get command.

@@ -15,7 +15,9 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-EXTRACTED_DIR="$SCRIPT_DIR/target/extracted"
+RUN_DIR="$SCRIPT_DIR/run"
+EXTRACTED_DIR="$RUN_DIR/extracted"
+PID_FILE="$RUN_DIR/dfc-bridge.pid"
 
 # Defaults
 MODE="dfc"
@@ -81,7 +83,7 @@ verify_dfc_setup() {
             echo "  [OK] $jar ($size)"
         else
             echo "  [MISSING] $jar"
-            ((errors++))
+            errors=$((errors + 1))
         fi
     done
 
@@ -95,7 +97,7 @@ verify_dfc_setup() {
         done
     else
         echo "  [MISSING] No log4j*.jar files found"
-        ((errors++))
+        errors=$((errors + 1))
     fi
 
     echo ""
@@ -103,17 +105,12 @@ verify_dfc_setup() {
     # Check DFC_CONFIG
     if [ ! -d "$DFC_CONFIG" ]; then
         echo "[ERROR] DFC_CONFIG directory not found: $DFC_CONFIG"
-        ((errors++))
+        errors=$((errors + 1))
     elif [ ! -f "$DFC_CONFIG/dfc.properties" ]; then
         echo "[WARNING] dfc.properties not found in $DFC_CONFIG"
-        echo "  You may need to create this file with docbroker settings."
+        echo "  You may need to create this file with your DFC settings."
     else
         echo "[OK] dfc.properties found"
-        # Extract docbroker info
-        local docbroker=$(grep -E '^dfc.docbroker.host\[0\]' "$DFC_CONFIG/dfc.properties" 2>/dev/null | cut -d= -f2)
-        if [ -n "$docbroker" ]; then
-            echo "     Docbroker: $docbroker"
-        fi
     fi
 
     echo ""
@@ -169,27 +166,55 @@ if [[ "$MODE" != "dfc" && "$MODE" != "nodfc" ]]; then
     exit 1
 fi
 
-# Check extracted directory exists
-if [ ! -d "$EXTRACTED_DIR" ]; then
-    echo "Error: Extracted JAR directory not found at $EXTRACTED_DIR"
-    echo "Run: mvn package && cd target && unzip dfc-bridge-*.jar -d extracted"
+# Find the newest built JAR
+JAR=""
+for candidate in "$SCRIPT_DIR"/target/dfc-bridge-*.jar "$SCRIPT_DIR"/dfc-bridge-*.jar; do
+    [ -e "$candidate" ] || continue
+    if [ -z "$JAR" ] || [ "$candidate" -nt "$JAR" ]; then
+        JAR="$candidate"
+    fi
+done
+
+if [ -z "$JAR" ]; then
+    echo "Error: No dfc-bridge-*.jar found in $SCRIPT_DIR/target or $SCRIPT_DIR"
+    echo "Run: mvn package"
     exit 1
 fi
 
-cd "$EXTRACTED_DIR"
+# Must run before any extraction: replacing the extracted classes under a
+# running bridge makes it fail on its next class load.
+if [ -f "$PID_FILE" ]; then
+    RUNNING_PID=$(cat "$PID_FILE")
+    case "$RUNNING_PID" in
+        ''|*[!0-9]*) ;;
+        *)
+            if ps -p "$RUNNING_PID" -o args= 2>/dev/null | grep -q DfcBridgeApplication; then
+                echo "DFC Bridge is already running (PID $RUNNING_PID). Stop it before starting again."
+                exit 1
+            fi
+            ;;
+    esac
+fi
 
-# Build Spring Boot lib classpath (exclude log4j-to-slf4j bridge to avoid conflict with DFC)
+# The marker lives inside the extracted tree and is written last, so a failed
+# or interrupted unzip leaves no matching marker. The time is read before the
+# unzip so that a jar rewritten during it is extracted again on the next start.
+EXTRACT_MARKER="$EXTRACTED_DIR/.extracted"
+JAR_STAMP="$JAR"$'\n'"$(stat -c %y "$JAR")"
+if [ ! -f "$EXTRACT_MARKER" ] || [ "$(cat "$EXTRACT_MARKER")" != "$JAR_STAMP" ]; then
+    echo "Extracting $JAR"
+    rm -rf "$EXTRACTED_DIR"
+    mkdir -p "$EXTRACTED_DIR"
+    unzip -q "$JAR" -d "$EXTRACTED_DIR"
+    printf '%s\n' "$JAR_STAMP" > "$EXTRACT_MARKER"
+fi
+
+cd "$RUN_DIR"
+
+# Build Spring Boot lib classpath
 build_boot_classpath() {
     local BOOT_CP=""
-    for jar in BOOT-INF/lib/*.jar; do
-        case "$jar" in
-            *log4j-to-slf4j*)
-                # Skip this conflicting bridge when in DFC mode
-                if [[ "$MODE" == "dfc" ]]; then
-                    continue
-                fi
-                ;;
-        esac
+    for jar in "$EXTRACTED_DIR"/BOOT-INF/lib/*.jar; do
         if [ -z "$BOOT_CP" ]; then
             BOOT_CP="$jar"
         else
@@ -197,36 +222,6 @@ build_boot_classpath() {
         fi
     done
     echo "$BOOT_CP"
-}
-
-# Build DFC classpath (DFC log4j jars MUST come first to avoid conflicts)
-build_dfc_classpath() {
-    local DFC_CP=""
-
-    # Add log4j jars first
-    for jar in "$DFC_HOME"/log4j*.jar; do
-        [ -e "$jar" ] || continue
-        if [ -z "$DFC_CP" ]; then
-            DFC_CP="$jar"
-        else
-            DFC_CP="$DFC_CP:$jar"
-        fi
-    done
-
-    # Add remaining DFC jars (skip log4j, already added)
-    for jar in "$DFC_HOME"/*.jar; do
-        [ -e "$jar" ] || continue
-        case "$jar" in
-            *log4j*) continue ;;
-        esac
-        if [ -z "$DFC_CP" ]; then
-            DFC_CP="$jar"
-        else
-            DFC_CP="$DFC_CP:$jar"
-        fi
-    done
-
-    echo "$DFC_CP"
 }
 
 # JVM options for DFC compatibility (required for Java 17+)
@@ -239,27 +234,23 @@ JVM_OPTS="--add-opens java.base/sun.security.x509=ALL-UNNAMED \
   --add-opens java.base/java.io=ALL-UNNAMED \
   --add-opens java.base/java.security=ALL-UNNAMED"
 
-# Build classpath based on mode
-BOOT_CP=$(build_boot_classpath)
+# DFC is not on the classpath: the bridge loads it per docbroker from --dfc.home
+CP="$EXTRACTED_DIR/BOOT-INF/classes:$(build_boot_classpath)"
+DFC_ARGS=()
 
 if [[ "$MODE" == "dfc" ]]; then
-    # DFC mode: DFC jars first, then config, then app classes, then boot libs
     if [ ! -d "$DFC_HOME" ]; then
         echo "Error: DFC_HOME directory not found at $DFC_HOME"
         echo "Either set DFC_HOME environment variable or use --mode=nodfc"
         exit 1
     fi
 
-    DFC_CP=$(build_dfc_classpath)
-    CP="$DFC_CP:$DFC_CONFIG:BOOT-INF/classes:$BOOT_CP"
+    DFC_ARGS=(--dfc.home="$DFC_HOME" --dfc.config="$DFC_CONFIG")
 
     echo "Starting DFC Bridge in DFC mode..."
     echo "  DFC_HOME: $DFC_HOME"
     echo "  Port: $SERVER_PORT"
 else
-    # No-DFC mode: just app classes and boot libs
-    CP="BOOT-INF/classes:$BOOT_CP"
-
     echo "Starting DFC Bridge in NO-DFC mode (development/testing)..."
     echo "  Port: $SERVER_PORT"
     echo "  Note: DFC operations will return 503 Service Unavailable"
@@ -267,9 +258,13 @@ fi
 
 echo ""
 
+# exec keeps this PID for the bridge
+echo $$ > "$PID_FILE"
+
 # Run the application
 exec java \
   $JVM_OPTS \
   -Dserver.port="$SERVER_PORT" \
   -cp "$CP" \
-  com.spirecentral.dfcbridge.DfcBridgeApplication
+  com.spirecentral.dfcbridge.DfcBridgeApplication \
+  "${DFC_ARGS[@]}"

@@ -32,13 +32,13 @@ Client Application (e.g., VS Code Extension)
 
 ## Prerequisites
 
-- **Java 17+** (or Java 11+ with minor pom.xml adjustments)
+- **Java 17+**
 - **Maven 3.8+**
 - **DFC JARs** from a Documentum installation (only 5 JARs required):
   - `dfc.jar` - Core DFC library
   - `aspectjrt.jar` - AspectJ runtime
   - `log4j-api-*.jar`, `log4j-core-*.jar`, `log4j-1.2-api-*.jar` - Logging
-- **dfc.properties** file configured with your docbroker settings
+- **dfc.properties** file with your DFC settings. It does not choose the docbroker: each connect request names the docbroker and port to connect through
 
 > **Note:** DFC libraries cannot be embedded due to licensing restrictions. Copy only the required JARs from an existing Documentum installation. See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed setup instructions.
 
@@ -48,7 +48,7 @@ Client Application (e.g., VS Code Extension)
 # Build with Maven
 mvn clean package
 
-# The JAR will be in target/dfc-bridge-1.2.0.jar
+# The JAR will be in target/dfc-bridge-2.0.0.jar
 ```
 
 ## Running
@@ -57,11 +57,14 @@ mvn clean package
 
 The `start-dfc-bridge.sh` script provides an easy way to run DFC Bridge with or without DFC libraries.
 
-**First, extract the JAR:**
+**First, build the JAR:**
 ```bash
 mvn package
-unzip target/dfc-bridge-*.jar -d target/extracted
 ```
+
+On start, the script extracts the JAR into `run/extracted` when the JAR has changed since the last start. The bridge writes its log to `run/logs`.
+
+The script also runs from the unzipped release bundle, where it uses the JAR beside it.
 
 **Run with DFC (production mode):**
 ```bash
@@ -99,20 +102,27 @@ unzip target/dfc-bridge-*.jar -d target/extracted
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `DFC_HOME` | Path to DFC shared libraries | `$HOME/documentum/shared` |
-| `DFC_CONFIG` | Path to DFC config directory | `$HOME/documentum/config` |
+| `DFC_HOME` | Path to DFC shared libraries, passed to the bridge as `--dfc.home` | `$HOME/documentum/shared` |
+| `DFC_CONFIG` | Path to DFC config directory, passed to the bridge as `--dfc.config` | `$HOME/documentum/config` |
 | `SERVER_PORT` | Server port | 9876 |
+| `SERVER_ADDRESS` | Address the server listens on | 127.0.0.1 |
+
+#### On Windows
+
+Run `start-dfc-bridge.cmd` from a Command Prompt or PowerShell window. It takes the same options and environment variables as `start-dfc-bridge.sh`.
+
+```bat
+start-dfc-bridge.cmd
+start-dfc-bridge.cmd --mode=nodfc --port=8080
+```
+
+To set an environment variable, use `set DFC_HOME=C:\Documentum\shared` in a Command Prompt or `$env:DFC_HOME = "C:\Documentum\shared"` in PowerShell.
 
 ### Alternative: Manual Java Invocation
 
 If you prefer not to use the startup script:
 
-**With DFC on classpath:**
-```bash
-export DFC_HOME=/opt/dctm/product/7.3
-export CLASSPATH=$DFC_HOME/shared/lib/dfc.jar:$DFC_HOME/shared/lib/*
-java -jar target/dfc-bridge-1.2.0.jar
-```
+**With DFC:** see [Manual Invocation](DEPLOYMENT.md#manual-invocation) in `DEPLOYMENT.md`.
 
 **Using Maven (development):**
 ```bash
@@ -125,13 +135,28 @@ Application configuration is in `src/main/resources/application.yml`:
 
 ```yaml
 server:
+  address: 127.0.0.1
   port: 9876
 
 dfc:
   session:
     timeout-minutes: 30      # Session timeout
-    auto-reconnect: true     # Auto-reconnect on session loss
-    max-sessions-per-profile: 10
+```
+
+### Listening Address
+
+The bridge listens on **127.0.0.1** only, so only the local machine can reach it. The bridge has no authentication: any client that can reach it can open a session and run any DFC method or dmAPI command as the connected user.
+
+To accept connections from other hosts, set the address to `0.0.0.0`:
+
+**With the startup script:**
+```bash
+SERVER_ADDRESS=0.0.0.0 ./start-dfc-bridge.sh
+```
+
+**With `java -jar`:**
+```bash
+java -jar dfc-bridge-2.0.0.jar --server.address=0.0.0.0
 ```
 
 ### Port Configuration
@@ -140,13 +165,13 @@ The default port is **9876**. Override using any of these methods:
 
 **Command line argument:**
 ```bash
-java -jar dfc-bridge-1.2.0.jar --server.port=8080
+java -jar dfc-bridge-2.0.0.jar --server.port=8080
 ```
 
 **Environment variable:**
 ```bash
 export SERVER_PORT=8080
-java -jar dfc-bridge-1.2.0.jar
+java -jar dfc-bridge-2.0.0.jar
 ```
 
 **application.yml override:**
@@ -157,9 +182,10 @@ Create `application.yml` in the same directory as the JAR.
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `SERVER_PORT` | HTTP port | 9876 |
+| `SERVER_ADDRESS` | Address the server listens on | 127.0.0.1 |
 | `DFC_SESSION_TIMEOUT_MINUTES` | Session timeout | 30 |
-| `DFC_HOME` | Path to DFC shared libraries (used by startup script) | - |
-| `DFC_CONFIG` | Path to DFC config directory (used by startup script) | - |
+| `DFC_HOME` | Path to DFC shared libraries (used by startup script, which passes it as `--dfc.home`) | - |
+| `DFC_CONFIG` | Path to DFC config directory (used by startup script, which passes it as `--dfc.config`) | - |
 
 ## API Documentation
 
@@ -190,10 +216,43 @@ Once running, access the Swagger UI at:
 |--------|----------|-------------|
 | GET | `/api/v1/objects/{id}` | Get object by r_object_id |
 | POST | `/api/v1/objects/{id}` | Update object attributes |
-| GET | `/api/v1/folders/{path}` | List folder contents |
-| GET | `/api/v1/types` | List object types |
+| POST | `/api/v1/objects` | Create object (201) |
+| DELETE | `/api/v1/objects/{id}` | Delete object (204); `allVersions` deletes every version |
+| PUT | `/api/v1/objects/{id}/lock` | Check out object |
+| DELETE | `/api/v1/objects/{id}/lock` | Cancel checkout (204) |
+| POST | `/api/v1/objects/{id}/versions` | Check in object; `versionLabel` defaults to `CURRENT` |
+| GET | `/api/v1/cabinets` | List cabinets |
+| GET | `/api/v1/objects/{id}/contents` | List folder contents by folder ID |
+| GET | `/api/v1/folders/{path}` | List folder contents by path |
+| GET | `/api/v1/types` | List object types (`pattern`) |
 | GET | `/api/v1/types/{typeName}` | Get type info |
-| POST | `/api/v1/api` | Execute arbitrary DFC method |
+
+### DFC API and dmAPI
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/api` | Execute a DFC method |
+| POST | `/api/v1/dmapi` | Execute a dmAPI command (dmAPIGet, dmAPIExec, dmAPISet) |
+
+### Users and Groups
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/users` | List users (`pattern`) |
+| GET | `/api/v1/users/{userName}` | Get user |
+| GET | `/api/v1/users/{userName}/groups` | Get groups for user |
+| GET | `/api/v1/groups` | List groups (`pattern`) |
+| GET | `/api/v1/groups/{groupName}` | Get group |
+
+### Status
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/status` | Get bridge status: mode `full` or `degraded` |
+| GET | `/status` | Redirect to `/api/v1/status` |
+| GET | `/health` | Health check, returns `{"status": "ok"}` |
+
+Every endpoint under `/api/v1` except connect, disconnect, the session paths and `/status` needs a `sessionId`: as a query parameter, or in the request body of `POST /dql`, `POST /objects/{id}`, `POST /objects`, `POST /api` and `POST /dmapi`.
 
 ## Usage Examples
 
@@ -260,23 +319,35 @@ curl http://localhost:9876/actuator/health
 
 ```
 dfc-bridge/
-├── src/main/java/com/spire/dfcbridge/
+├── src/main/java/com/spirecentral/dfcbridge/
 │   ├── DfcBridgeApplication.java       # Main application
 │   ├── config/                          # Configuration classes
 │   ├── controller/                      # REST controllers
 │   │   ├── SessionController.java
 │   │   ├── DqlController.java
-│   │   └── ObjectController.java
+│   │   ├── ObjectController.java
+│   │   ├── UserGroupController.java
+│   │   ├── StatusController.java
+│   │   └── RedirectController.java
 │   ├── dto/                             # Request/Response DTOs
 │   ├── exception/                       # Exception handling
 │   ├── model/                           # Domain models
-│   └── service/                         # Business logic
-│       ├── DfcSessionService.java
-│       ├── DqlService.java
-│       ├── ObjectService.java
-│       └── impl/                        # Service implementations
+│   ├── service/                         # Business logic
+│   │   ├── DfcSessionService.java
+│   │   ├── DqlService.java
+│   │   ├── ObjectService.java
+│   │   ├── DmApiService.java
+│   │   ├── UserGroupService.java
+│   │   ├── DfcAvailabilityService.java
+│   │   ├── DfcInstanceRegistry.java    # One DFC instance per docbroker
+│   │   └── impl/                        # Service implementations
+│   └── util/                            # DFC reflection, query and error helpers
 ├── src/main/resources/
 │   └── application.yml                  # Configuration
+├── start-dfc-bridge.sh                  # Startup script (Linux)
+├── start-dfc-bridge.cmd                 # Startup script (Windows), runs start-dfc-bridge.ps1
+├── start-dfc-bridge.ps1
+├── spotbugs-exclude.xml                 # SpotBugs items triaged as not to fix
 └── pom.xml                              # Maven build file
 ```
 
@@ -285,6 +356,14 @@ dfc-bridge/
 ```bash
 mvn test
 ```
+
+To run the tests with the static analysis and the coverage report:
+
+```bash
+mvn verify
+```
+
+`mvn verify` also runs SpotBugs, which fails the build on any item that `spotbugs-exclude.xml` does not cover, and writes the coverage report to `target/site/jacoco/index.html`.
 
 ## Graceful Degradation
 
@@ -306,27 +385,23 @@ Response when DFC unavailable:
   "service": "dfc-bridge",
   "dfcAvailable": false,
   "mode": "degraded",
-  "dfcUnavailableReason": "DFC client class not found on classpath"
+  "dfcUnavailableReason": "dfc.home is not set"
 }
 ```
 
 ## Troubleshooting
 
-### DFC not found on classpath
+### DFC not found
 
-Error: `DFC_UNAVAILABLE - DFC libraries are not available`
+Error: `DFC_UNAVAILABLE - DFC libraries are not available`. `/api/v1/status` gives the reason: `dfc.home is not set`, or `dfc.jar not found in <path>`.
 
-Solution: Ensure DFC JARs are on the classpath when running the application:
-```bash
-export CLASSPATH=$DFC_HOME/shared/lib/dfc.jar:$DFC_HOME/shared/lib/*
-```
+Solution: Set `DFC_HOME` to the directory that holds the DFC JARs and start with `./start-dfc-bridge.sh`, or follow [Manual Invocation](DEPLOYMENT.md#manual-invocation) in `DEPLOYMENT.md`. Run `./start-dfc-bridge.sh --verify` to check the setup.
 
 ### Connection refused
 
 Check that:
-1. The docbroker host and port are correct
+1. The `docbroker` and `port` in the connect request are correct. They choose the docbroker; `dfc.properties` does not
 2. Network connectivity to the docbroker is available
-3. The `dfc.properties` file is properly configured
 
 ### Session timeout
 

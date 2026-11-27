@@ -4,12 +4,22 @@ import com.spirecentral.dfcbridge.dto.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 
@@ -21,100 +31,20 @@ public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-    @ExceptionHandler(SessionNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleSessionNotFound(
-            SessionNotFoundException ex, HttpServletRequest request) {
-        log.warn("Session not found: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ErrorResponse.builder()
-                        .code(ex.getCode())
-                        .message(ex.getMessage())
-                        .path(request.getRequestURI())
-                        .build());
-    }
-
-    @ExceptionHandler(ConnectionException.class)
-    public ResponseEntity<ErrorResponse> handleConnectionException(
-            ConnectionException ex, HttpServletRequest request) {
-        log.error("Connection failed: {}", ex.getMessage(), ex);
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(ErrorResponse.builder()
-                        .code(ex.getCode())
-                        .message(ex.getMessage())
-                        .path(request.getRequestURI())
-                        .build());
-    }
-
-    @ExceptionHandler(DqlException.class)
-    public ResponseEntity<ErrorResponse> handleDqlException(
-            DqlException ex, HttpServletRequest request) {
-        log.warn("DQL error: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.builder()
-                        .code(ex.getCode())
-                        .message(ex.getMessage())
-                        .path(request.getRequestURI())
-                        .build());
-    }
-
-    @ExceptionHandler(ObjectNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleObjectNotFound(
-            ObjectNotFoundException ex, HttpServletRequest request) {
-        log.warn("Object not found: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ErrorResponse.builder()
-                        .code(ex.getCode())
-                        .message(ex.getMessage())
-                        .path(request.getRequestURI())
-                        .build());
-    }
-
-    @ExceptionHandler(UserNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleUserNotFound(
-            UserNotFoundException ex, HttpServletRequest request) {
-        log.warn("User not found: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ErrorResponse.builder()
-                        .code(ex.getCode())
-                        .message(ex.getMessage())
-                        .path(request.getRequestURI())
-                        .build());
-    }
-
-    @ExceptionHandler(GroupNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleGroupNotFound(
-            GroupNotFoundException ex, HttpServletRequest request) {
-        log.warn("Group not found: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ErrorResponse.builder()
-                        .code(ex.getCode())
-                        .message(ex.getMessage())
-                        .path(request.getRequestURI())
-                        .build());
-    }
-
-    @ExceptionHandler(DfcUnavailableException.class)
-    public ResponseEntity<ErrorResponse> handleDfcUnavailable(
-            DfcUnavailableException ex, HttpServletRequest request) {
-        log.warn("DFC unavailable: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(ErrorResponse.builder()
-                        .code(ex.getCode())
-                        .message(ex.getMessage())
-                        .path(request.getRequestURI())
-                        .build());
-    }
-
     @ExceptionHandler(DfcBridgeException.class)
     public ResponseEntity<ErrorResponse> handleDfcBridgeException(
             DfcBridgeException ex, HttpServletRequest request) {
-        log.error("DFC Bridge error: {}", ex.getMessage(), ex);
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ErrorResponse.builder()
-                        .code(ex.getCode())
-                        .message(ex.getMessage())
-                        .path(request.getRequestURI())
-                        .build());
+        HttpStatus status = ex.getStatus();
+        if (status.is5xxServerError()) {
+            log.error("{} {}: {}", status.value(), ex.getCode(), ex.getMessage(), ex);
+        } else {
+            log.warn("{} {}: {}", status.value(), ex.getCode(), ex.getMessage());
+        }
+        return jsonError(status, ErrorResponse.builder()
+                .code(ex.getCode())
+                .message(ex.getMessage())
+                .path(request.getRequestURI())
+                .build());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -124,24 +54,100 @@ public class GlobalExceptionHandler {
                 .map(FieldError::getDefaultMessage)
                 .collect(Collectors.joining(", "));
 
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.builder()
-                        .code("VALIDATION_ERROR")
-                        .message("Validation failed: " + errors)
-                        .path(request.getRequestURI())
-                        .build());
+        return jsonError(HttpStatus.BAD_REQUEST, ErrorResponse.builder()
+                .code("VALIDATION_ERROR")
+                .message("Validation failed: " + errors)
+                .path(request.getRequestURI())
+                .build());
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponse> handleMissingParameter(
+            MissingServletRequestParameterException ex, HttpServletRequest request) {
+        return requestError(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR",
+                "Missing request parameter: " + ex.getParameterName(), request);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(
+            MethodArgumentTypeMismatchException ex, HttpServletRequest request) {
+        return requestError(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR",
+                "Invalid value for parameter " + ex.getName() + ": " + ex.getValue(), request);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleUnreadableBody(
+            HttpMessageNotReadableException ex, HttpServletRequest request) {
+        return requestError(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR",
+                "Request body is missing or is not valid JSON", request);
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupported(
+            HttpRequestMethodNotSupportedException ex, HttpServletRequest request) {
+        return requestError(HttpStatus.METHOD_NOT_ALLOWED, "METHOD_NOT_ALLOWED",
+                "Method " + ex.getMethod() + " is not supported for " + request.getRequestURI(), request);
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMediaTypeNotSupported(
+            HttpMediaTypeNotSupportedException ex, HttpServletRequest request) {
+        MediaType contentType = ex.getContentType();
+        // Null when the Content-Type header cannot be parsed
+        String type = contentType != null
+                ? contentType.getType() + "/" + contentType.getSubtype()
+                : request.getContentType();
+        return requestError(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "UNSUPPORTED_MEDIA_TYPE",
+                "Content type " + type + " is not supported", request);
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
+    public ResponseEntity<ErrorResponse> handleMediaTypeNotAcceptable(
+            HttpMediaTypeNotAcceptableException ex, HttpServletRequest request) {
+        return requestError(HttpStatus.NOT_ACCEPTABLE, "NOT_ACCEPTABLE",
+                "Accept " + request.getHeader(HttpHeaders.ACCEPT) + " is not supported, use application/json",
+                request);
+    }
+
+    @ExceptionHandler(NoHandlerFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoHandlerFound(
+            NoHandlerFoundException ex, HttpServletRequest request) {
+        return requestError(HttpStatus.NOT_FOUND, "NOT_FOUND",
+                "No endpoint " + ex.getHttpMethod() + " " + ex.getRequestURL(), request);
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResourceFound(
+            NoResourceFoundException ex, HttpServletRequest request) {
+        return requestError(HttpStatus.NOT_FOUND, "NOT_FOUND", "No resource " + ex.getResourcePath(), request);
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(
             Exception ex, HttpServletRequest request) {
         log.error("Unexpected error: {}", ex.getMessage(), ex);
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ErrorResponse.builder()
-                        .code("INTERNAL_ERROR")
-                        .message("An unexpected error occurred")
-                        .details(ex.getMessage())
-                        .path(request.getRequestURI())
-                        .build());
+        return jsonError(HttpStatus.INTERNAL_SERVER_ERROR, ErrorResponse.builder()
+                .code("INTERNAL_ERROR")
+                .message("An unexpected error occurred")
+                .details(ex.getMessage())
+                .path(request.getRequestURI())
+                .build());
+    }
+
+    private ResponseEntity<ErrorResponse> requestError(
+            HttpStatus status, String code, String message, HttpServletRequest request) {
+        log.warn("{} {}: {}", status.value(), code, message);
+        return jsonError(status, ErrorResponse.builder()
+                .code(code)
+                .message(message)
+                .path(request.getRequestURI())
+                .build());
+    }
+
+    // A preset content type makes Spring skip the Accept check, so a client that refuses JSON still gets the body
+    private ResponseEntity<ErrorResponse> jsonError(HttpStatus status, ErrorResponse body) {
+        return ResponseEntity.status(status)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body);
     }
 }

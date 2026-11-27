@@ -4,6 +4,8 @@ import com.spirecentral.dfcbridge.dto.ConnectRequest;
 import com.spirecentral.dfcbridge.dto.ConnectResponse;
 import com.spirecentral.dfcbridge.model.SessionInfo;
 
+import java.util.function.Function;
+
 /**
  * Service interface for managing DFC sessions.
  */
@@ -48,11 +50,12 @@ public interface DfcSessionService {
     void touchSession(String sessionId);
 
     /**
-     * Get the underlying DFC session manager for a session.
-     * This returns the raw DFC session object for use by other services.
+     * Run work with the DFC session of a bridge session while holding that session's lock,
+     * so that only one request uses the DFC session at a time. Updates the last activity time.
      *
      * @param sessionId Session ID
-     * @return The DFC session manager (implementation-specific)
+     * @param work Work that receives the DFC session (implementation-specific) and returns a result
+     * @return The result of the work
      */
-    Object getDfcSession(String sessionId);
+    <T> T withSession(String sessionId, Function<Object, T> work);
 }

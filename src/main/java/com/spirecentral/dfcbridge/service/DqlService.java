@@ -15,13 +15,4 @@ public interface DqlService {
      * @return Query result with columns and rows
      */
     QueryResult executeQuery(DqlRequest request);
-
-    /**
-     * Execute a DQL query that modifies data (INSERT, UPDATE, DELETE).
-     *
-     * @param sessionId Session ID
-     * @param dql       DQL statement
-     * @return Number of affected rows
-     */
-    int executeUpdate(String sessionId, String dql);
 }

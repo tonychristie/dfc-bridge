@@ -1,5 +1,6 @@
 package com.spirecentral.dfcbridge.controller;
 
+import com.spirecentral.dfcbridge.config.ErrorResponses;
 import com.spirecentral.dfcbridge.dto.ApiRequest;
 import com.spirecentral.dfcbridge.dto.ApiResponse;
 import com.spirecentral.dfcbridge.dto.CreateObjectRequest;
@@ -31,6 +32,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1")
 @Tag(name = "Objects", description = "Documentum object operations")
+@ErrorResponses(session = true)
 public class ObjectController {
 
     private static final Logger log = LoggerFactory.getLogger(ObjectController.class);
@@ -56,7 +58,7 @@ public class ObjectController {
         ),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
             responseCode = "404",
-            description = "Object not found",
+            description = "Object or session not found",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         )
     })
@@ -98,7 +100,7 @@ public class ObjectController {
         ),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
             responseCode = "404",
-            description = "Folder not found",
+            description = "Folder or session not found",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         )
     })
@@ -122,12 +124,7 @@ public class ObjectController {
         ),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
             responseCode = "404",
-            description = "Object not found",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-        ),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-            responseCode = "400",
-            description = "Invalid request",
+            description = "Object or session not found",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         )
     })
@@ -151,7 +148,7 @@ public class ObjectController {
         ),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
             responseCode = "404",
-            description = "Folder not found",
+            description = "Folder or session not found",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         )
     })
@@ -198,7 +195,7 @@ public class ObjectController {
         ),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
             responseCode = "404",
-            description = "Type not found",
+            description = "Type or session not found",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         )
     })
@@ -222,12 +219,7 @@ public class ObjectController {
         ),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
             responseCode = "404",
-            description = "Object or type not found",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-        ),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-            responseCode = "500",
-            description = "API execution error",
+            description = "Object, type or session not found",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         )
     })
@@ -247,16 +239,6 @@ public class ObjectController {
             responseCode = "200",
             description = "dmAPI command executed",
             content = @Content(schema = @Schema(implementation = ApiResponse.class))
-        ),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-            responseCode = "400",
-            description = "Invalid request",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-        ),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-            responseCode = "500",
-            description = "dmAPI execution error",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         )
     })
     public ResponseEntity<ApiResponse> executeDmApi(@Valid @RequestBody DmApiRequest request) {
@@ -286,7 +268,7 @@ public class ObjectController {
         ),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
             responseCode = "404",
-            description = "Object not found",
+            description = "Object or session not found",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         )
     })
@@ -309,7 +291,7 @@ public class ObjectController {
         ),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
             responseCode = "404",
-            description = "Object not found",
+            description = "Object or session not found",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         )
     })
@@ -333,7 +315,7 @@ public class ObjectController {
         ),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
             responseCode = "404",
-            description = "Object not found",
+            description = "Object or session not found",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         )
     })
@@ -357,11 +339,6 @@ public class ObjectController {
             responseCode = "201",
             description = "Object created successfully",
             content = @Content(schema = @Schema(implementation = ObjectInfo.class))
-        ),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-            responseCode = "400",
-            description = "Invalid request",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         )
     })
     public ResponseEntity<ObjectInfo> createObject(@Valid @RequestBody CreateObjectRequest request) {
@@ -381,7 +358,7 @@ public class ObjectController {
         ),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
             responseCode = "404",
-            description = "Object not found",
+            description = "Object or session not found",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         )
     })

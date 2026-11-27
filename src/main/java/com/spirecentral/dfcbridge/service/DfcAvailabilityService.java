@@ -4,7 +4,11 @@ import com.spirecentral.dfcbridge.exception.DfcUnavailableException;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 /**
  * Service to check and track DFC library availability.
@@ -15,22 +19,28 @@ public class DfcAvailabilityService {
 
     private static final Logger log = LoggerFactory.getLogger(DfcAvailabilityService.class);
 
-    private static final String DFC_CLIENT_CLASS = "com.documentum.fc.client.DfClient";
+    @Value("${dfc.home:}")
+    private String dfcHome;
 
     private boolean dfcAvailable = false;
     private String unavailableReason = null;
 
     @PostConstruct
     public void checkDfcAvailability() {
+        unavailableReason = null;
         try {
-            Class.forName(DFC_CLIENT_CLASS);
-            dfcAvailable = true;
-            log.info("DFC libraries detected - full functionality available");
-        } catch (ClassNotFoundException e) {
-            dfcAvailable = false;
-            unavailableReason = "DFC client class not found on classpath";
-            log.warn("DFC libraries not found - running in degraded mode. " +
-                     "DFC-dependent operations will return errors.");
+            if (dfcHome == null || dfcHome.isBlank()) {
+                unavailableReason = "dfc.home is not set";
+            } else if (!Files.isRegularFile(Path.of(dfcHome, "dfc.jar"))) {
+                unavailableReason = "dfc.jar not found in " + dfcHome;
+            }
+            dfcAvailable = unavailableReason == null;
+            if (dfcAvailable) {
+                log.info("DFC libraries detected in {} - full functionality available", dfcHome);
+            } else {
+                log.warn("{} - running in degraded mode. DFC-dependent operations will return errors.",
+                        unavailableReason);
+            }
         } catch (Exception e) {
             dfcAvailable = false;
             unavailableReason = e.getMessage();
