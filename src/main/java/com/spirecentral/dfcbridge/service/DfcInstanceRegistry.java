@@ -17,6 +17,8 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -40,6 +42,8 @@ public class DfcInstanceRegistry {
     private static final String DFC_PROPERTIES = "dfc.properties";
     private static final String DOCBROKER_PREFIX = "dfc.docbroker.";
     private static final String DATA_DIR = "dfc.data.dir";
+    private static final String DATE_FORMAT = "dfc.date_format";
+    private static final Pattern SHORT_YEAR = Pattern.compile("(?<!y)y{1,3}(?!y)");
     private static final String INCLUDE = "#include";
     private static final Pattern INCLUDE_LINE = Pattern.compile("#include\\s+\\S.*");
     private static final Pattern INDEXED_DOCBROKER_KEY = Pattern.compile("dfc\\.docbroker\\.[a-z_]+\\[\\d+\\]");
@@ -98,6 +102,12 @@ public class DfcInstanceRegistry {
         entries.setProperty(DOCBROKER_PREFIX + "host[0]", host);
         entries.setProperty(DOCBROKER_PREFIX + "port[0]", String.valueOf(port));
         entries.setProperty(DATA_DIR, dataDir.toString());
+        Properties userProperties = new Properties();
+        userProperties.load(new StringReader(String.join("\n", lines)));
+        String userDateFormat = userProperties.getProperty(DATE_FORMAT);
+        if (userDateFormat == null || userDateFormat.isBlank()) {
+            entries.setProperty(DATE_FORMAT, localeDateFormat());
+        }
         ByteArrayOutputStream stored = new ByteArrayOutputStream();
         entries.store(stored, null);
         stored.toString(StandardCharsets.ISO_8859_1).lines()
@@ -105,6 +115,17 @@ public class DfcInstanceRegistry {
                 .forEach(lines::add);
 
         Files.write(configDir.resolve(DFC_PROPERTIES), lines, StandardCharsets.ISO_8859_1);
+    }
+
+    // DFC builds the same pattern when dfc.date_format is not set, but rejects a one-letter year
+    static String localeDateFormat() {
+        DateFormat format = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM);
+        return dateFormatFrom(((SimpleDateFormat) format).toPattern());
+    }
+
+    static String dateFormatFrom(String pattern) {
+        String plainSpaces = pattern.replace('\u202F', ' ').replace('\u00A0', ' ');
+        return SHORT_YEAR.matcher(plainSpaces.replace(", ", " ")).replaceAll("yyyy");
     }
 
     private void expand(Path file, Set<Path> chain, List<String> out) throws IOException {

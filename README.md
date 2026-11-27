@@ -48,7 +48,7 @@ Client Application (e.g., VS Code Extension)
 # Build with Maven
 mvn clean package
 
-# The JAR will be in target/dfc-bridge-2.0.0.jar
+# The JAR will be in target/dfc-bridge-2.0.1.jar
 ```
 
 ## Running
@@ -156,7 +156,7 @@ SERVER_ADDRESS=0.0.0.0 ./start-dfc-bridge.sh
 
 **With `java -jar`:**
 ```bash
-java -jar dfc-bridge-2.0.0.jar --server.address=0.0.0.0
+java -jar dfc-bridge-2.0.1.jar --server.address=0.0.0.0
 ```
 
 ### Port Configuration
@@ -165,17 +165,25 @@ The default port is **9876**. Override using any of these methods:
 
 **Command line argument:**
 ```bash
-java -jar dfc-bridge-2.0.0.jar --server.port=8080
+java -jar dfc-bridge-2.0.1.jar --server.port=8080
 ```
 
 **Environment variable:**
 ```bash
 export SERVER_PORT=8080
-java -jar dfc-bridge-2.0.0.jar
+java -jar dfc-bridge-2.0.1.jar
 ```
 
 **application.yml override:**
 Create `application.yml` in the same directory as the JAR.
+
+### Date Format
+
+When `dfc.properties` does not set `dfc.date_format`, or sets it to an empty value, the bridge sets it to the date and time pattern of the JVM locale, with a four-digit year and no comma between the date and the time. For example, an en-GB JVM gives `dd/MM/yyyy HH:mm:ss` and an en-US JVM gives `M/d/yyyy h:mm:ss a`.
+
+A `dfc.date_format` in `dfc.properties` replaces this default. The pattern needs a four-letter year (`yyyy`): DFC rejects a one-letter year, and the connect then fails.
+
+DFC uses the format both for the dates it returns and for the time text it accepts, so a client that sends a time as text must send it in this format.
 
 ### Environment Variables
 
