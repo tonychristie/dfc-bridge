@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.1] - 2026-11-27
+
+### Fixed
+- `POST /api/v1/connect` no longer fails with 500 `CONNECTION_FAILED` when the JVM locale's date pattern has a one-letter year, as for en-GB (`dd/MM/y, HH:mm:ss`) and fr-FR. When `dfc.properties` does not set `dfc.date_format`, the bridge sets it to the JVM locale's date and time pattern with a four-digit year, for example `dd/MM/yyyy HH:mm:ss` for en-GB
+
+### Changed
+- When `dfc.properties` does not set `dfc.date_format`, dates have no comma between the date and the time. For example, with an en-US JVM `12/29/2025, 7:52:48 PM` becomes `12/29/2025 7:52:48 PM`, and with de-DE `29.12.2025, 19:52:48` becomes `29.12.2025 19:52:48`. A client that sends time text must send the new form. To keep the old form, set `dfc.date_format` in `dfc.properties`, for example `dfc.date_format=M/d/yyyy, h:mm:ss a` for en-US
+
 ## [2.0.0] - 2026-11-27
 
 ### Changed
