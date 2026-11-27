@@ -118,6 +118,8 @@ dfc.tracing.enabled=false
 dfc.tracing.timing.enabled=false
 ```
 
+When `dfc.properties` does not set `dfc.date_format`, or sets it to an empty value, the bridge sets it to the date and time pattern of the JVM locale, with a four-digit year and no comma between the date and the time, for example `dd/MM/yyyy HH:mm:ss` for en-GB and `M/d/yyyy h:mm:ss a` for en-US. A `dfc.date_format` in `dfc.properties`, or in a file it includes, replaces this default. The pattern needs a four-letter year (`yyyy`). DFC uses the format both for the dates it returns and for the time text it accepts.
+
 ### Docbroker Configuration
 
 The docbroker is the entry point to Documentum. The connect request chooses it: the `docbroker` and `port` of `POST /api/v1/connect` decide which environment the session connects to. The `dfc.docbroker.*` entries of `dfc.properties` are not used to route a connect, and a docbroker that is in no `dfc.properties` can be used.
@@ -145,7 +147,7 @@ Each DFC instance has its own classloader over every JAR in `--dfc.home` except 
 
 For each new docbroker host and port, the bridge writes `dfc-instances/<host>_<port>/` in its working directory (`run/` under the startup scripts):
 
-- `config/dfc.properties`: every line of `<dfc.config>/dfc.properties`, with each `#include` line replaced by the lines of the included file, except the indexed docbroker entries (such as `dfc.docbroker.host[0]` and `dfc.docbroker.port[0]`) and `dfc.data.dir`. Global docbroker settings such as `dfc.docbroker.search_order` are kept. The requested docbroker and `dfc.data.dir` set to the `data` folder are added at the end. A missing or unreadable include is logged and skipped
+- `config/dfc.properties`: every line of `<dfc.config>/dfc.properties`, with each `#include` line replaced by the lines of the included file, except the indexed docbroker entries (such as `dfc.docbroker.host[0]` and `dfc.docbroker.port[0]`) and `dfc.data.dir`. Global docbroker settings such as `dfc.docbroker.search_order` are kept. The requested docbroker and `dfc.data.dir` set to the `data` folder are added at the end, and so is `dfc.date_format` set to the pattern of the JVM locale when the expanded lines set no `dfc.date_format` or an empty one (see [dfc.properties](#dfcproperties)). A missing or unreadable include is logged and skipped
 - `config/`: a copy of every other file of `<dfc.config>`, such as `dfc.keystore` and `log4j2.properties`
 - `data/`: the DFC data folder of that instance
 
